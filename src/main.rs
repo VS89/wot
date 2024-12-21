@@ -1,3 +1,6 @@
+use wot::zip_directory;
+
 fn main() {
-    println!("Hello, world!");
+    let result = zip_directory("/Users/valentins/Desktop/test_allure_report");
+    println!("{:?}", result);
 }
