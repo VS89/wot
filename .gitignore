@@ -2,3 +2,4 @@
 .envrc
 Cargo.lock
 log*
+/test_files

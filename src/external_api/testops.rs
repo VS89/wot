@@ -4,9 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::error::Error;
 use std::path::PathBuf;
-use tokio::fs;
-use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
 
 #[derive(Debug)]
 /// Асинхронный API клиент для TestOps
@@ -120,17 +117,17 @@ impl TestopsApiClient {
     /// Получаем Part .zip архива для передачи в multipart::Form
     fn get_part_zip_archive(
         &self,
-        archive_file_path: PathBuf,
+        full_file_path_to_archive: &PathBuf,
     ) -> Result<multipart::Part, Box<dyn Error>> {
         // Читаем массив байтов
-        let file_to_bytes = std::fs::read(&archive_file_path).map_err(|e| {
+        let file_to_bytes = std::fs::read(&full_file_path_to_archive).map_err(|e| {
             format!(
                 "Не смогли прочитать файл по пути: {:?}. Получили ошибку: {:?}",
-                &archive_file_path, e
+                &full_file_path_to_archive, e
             )
         })?;
         // Проверяем, что расширение файла == zip
-        let extension_file = archive_file_path
+        let extension_file = full_file_path_to_archive
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
@@ -142,13 +139,13 @@ impl TestopsApiClient {
             .into());
         };
         // Получаем имя файла из переданного пути
-        let file_name = &archive_file_path
+        let file_name = &full_file_path_to_archive
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or_else(|| {
                 format!(
                     "Не удалось получить имя файла из пути: {:?}",
-                    &archive_file_path
+                    &full_file_path_to_archive
                 )
             })?;
         // Формируем и возвращаем Part для zip архива
@@ -184,12 +181,17 @@ impl TestopsApiClient {
     }
 
     /// Загрузка архива с отчетом в лаунч TestOps
+    ///
+    /// Параметры:
+    ///
+    /// full_file_path_to_archive: полный путь до архива с результатами тестов
+    /// launch_info: структура LaunchInfo { name, project_id }
     pub async fn post_archive_report_launch_upload(
         self,
-        archive_file_path: PathBuf,
+        full_file_path_to_archive: &PathBuf,
         launch_info: LaunchInfo,
     ) -> Result<ResponseLaunchUpload, Box<dyn Error>> {
-        let file_part = self.get_part_zip_archive(archive_file_path)?;
+        let file_part = self.get_part_zip_archive(full_file_path_to_archive)?;
 
         let info_file_json = serde_json::to_string(&launch_info)?;
         let info_file_multipart = multipart::Part::text(info_file_json)
@@ -201,9 +203,9 @@ impl TestopsApiClient {
         let response = self
             .post_with_file("/launch/upload".to_string(), multipart_form, None)
             .await?;
-        // if response.is_empty() {
-        //     todo!()
-        // }
+        if response.is_empty() {
+            return Err("Получили пустой ответ в ответе метода /launch/upload".into());
+        }
         match serde_json::from_str(&response) {
             Ok(value) => Ok(value),
             Err(e) => Err(format!(
@@ -233,10 +235,19 @@ pub struct LaunchInfo {
 }
 // {"launchId":42369,"testSessionId":112014,"filesCount":56}
 
+impl LaunchInfo {
+    pub fn new(name: &str, project_id: u32) -> Self {
+        Self {
+            name: name.to_string(),
+            project_id,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseLaunchUpload {
     #[serde(rename = "launchId")]
-    launch_id: u32,
+    pub launch_id: u32,
     #[serde(rename = "testSessionId")]
     test_session_id: u32,
     #[serde(rename = "filesCount")]
@@ -245,56 +256,97 @@ pub struct ResponseLaunchUpload {
 
 #[cfg(test)]
 mod tests {
-    use std::result;
-
-    use reqwest::header::HeaderValue;
-    use tokio::fs::OpenOptions;
-    use tokio::io::AsyncWriteExt;
-
     use super::*;
 
     #[tokio::test]
+    /// Проверяем загрузку лаунча
     async fn test_upload_launch() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let launch_info = LaunchInfo {
-            name: "check upload 2222".to_string(),
+            name: "check upload".to_string(),
             project_id: 2,
         };
-        let path_archive =
-            PathBuf::from("/Users/valentins/Desktop/testops_results_report_1735389182.zip");
-        let res = testops_api_client
+        let path_archive = PathBuf::from(format!(
+            "{}/test_files/testops_results_report_1735389182.zip",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        let _ = testops_api_client
             .post_archive_report_launch_upload(path_archive, launch_info)
-            .await
-            .unwrap();
-        // Открытие файла для дозаписи (или создание, если он не существует)
-        let mut file = OpenOptions::new()
-            .append(true) // Режим дозаписи
-            .create(true) // Cоздать файл, если он не существует
-            .open("log.log")
-            .await
-            .unwrap();
-        // Запись строки в файл
-        file.write_all(serde_json::to_string(&res).unwrap().as_bytes())
             .await
             .unwrap();
     }
 
-    #[tokio::test]
-    /// Получение инфы по лаунчу
-    async fn test_get_launch_by_id() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
-        // todo надо нормально допилить этот момент и разобраться как структуры записывать в файл, чтобы дебажить
-        let result = testops_api_client.get_launch_by_id(41213).await.unwrap();
-        // Открытие файла для дозаписи (или создание, если он не существует)
-        let mut file = OpenOptions::new()
-            .append(true) // Режим дозаписи
-            .create(true) // Cоздать файл, если он не существует
-            .open("log.log")
-            .await
-            .unwrap();
-        // Запись строки в файл
-        file.write_all(serde_json::to_string(&result).unwrap().as_bytes())
-            .await
-            .unwrap();
+    #[test]
+    /// Проверяем, что функция get_part_zip_archive отрабатывает
+    /// для архива .zip
+    fn test_get_part_zip_archive() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let file_path = PathBuf::from(format!(
+            "{}/test_files/testops_results_report_1735389182.zip",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        let _ = testops_api_client.get_part_zip_archive(file_path).unwrap();
+    }
+
+    #[test]
+    /// Проверяем, что функция get_part_zip_archive отдает ошибку для файла, у которого
+    /// расширение НЕ .zip
+    fn test_get_part_zip_archive_for_json() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let file_path = PathBuf::from(format!(
+            "{}/test_files/file.json",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        let exp_err = "Нужен файл с расширением .zip, был передан файл: *.\"json\"".to_string();
+        let act_err = testops_api_client
+            .get_part_zip_archive(file_path)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(act_err, exp_err, "Не получили ошибку для файла *.json");
+    }
+
+    #[test]
+    /// Проверяем, что функция get_part_zip_archive отрабатывает для пустого файла .zip
+    fn test_get_part_zip_archive_empty_file() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let file_path = PathBuf::from(format!(
+            "{}/test_files/empty_files.zip",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        let _ = testops_api_client.get_part_zip_archive(file_path).unwrap();
+    }
+
+    #[test]
+    /// Проверяем, что функция get_part_zip_archive обрабатывает ошибку, если передается директория
+    fn test_get_part_zip_archive_for_dir() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let file_path = PathBuf::from(format!("{}/test_files/", env!("CARGO_MANIFEST_DIR")));
+        let exp_err = "Не смогли прочитать файл по пути: \
+            \"/Users/valentins/Desktop/rust_projects/plugin_testops/test_files/\". \
+            Получили ошибку: Os { code: 21, kind: IsADirectory, message: \"Is a directory\" }"
+            .to_string();
+        let act_err = testops_api_client
+            .get_part_zip_archive(file_path)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(act_err, exp_err, "Не получили ошибку про директорию");
+    }
+
+    #[test]
+    /// Проверяем, что функция get_part_zip_archive отрабатывает для пустого файла .zip
+    fn test_get_part_zip_archive_empty_path() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let file_path = PathBuf::from("");
+        let exp_err = "Не смогли прочитать файл по пути: \"\". \
+            Получили ошибку: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }"
+            .to_string();
+        let act_err = testops_api_client
+            .get_part_zip_archive(file_path)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            act_err, exp_err,
+            "Не получили ошибку, что не смогли прочитать файл"
+        );
     }
 }

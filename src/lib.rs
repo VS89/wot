@@ -1,4 +1,4 @@
-pub mod internal_api;
+pub mod external_api;
 
 use directories::UserDirs;
 use std::error::Error;
