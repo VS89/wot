@@ -1,3 +1,5 @@
+pub mod external_api;
+
 use directories::UserDirs;
 use std::error::Error;
 use std::fs::{self, read_dir, File};
