@@ -8,7 +8,6 @@ fn main() {
   "testops_base_api_url": "",
   "testops_base_url": "",
   "testops_api_token": "",
-  "project_id_for_upload": 0,
 }
 "#;
             std::fs::write(path, config).expect("Не смогли создать конфиг")
