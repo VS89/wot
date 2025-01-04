@@ -1,12 +1,22 @@
 pub mod external_api;
 
 use directories::UserDirs;
+
 use std::error::Error;
 use std::fs::{self, read_dir, File};
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+/// Структура конфигурации приложения
+#[derive(Debug)]
+pub struct Config {
+    pub testops_base_api_url: String,
+    pub testops_base_url: String,
+    pub testops_api_token: String,
+}
 
 /// Получаем директорию для архива
 fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {

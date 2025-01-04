@@ -271,7 +271,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         ));
         let _ = testops_api_client
-            .post_archive_report_launch_upload(path_archive, launch_info)
+            .post_archive_report_launch_upload(&path_archive, launch_info)
             .await
             .unwrap();
     }
@@ -285,7 +285,7 @@ mod tests {
             "{}/test_files/testops_results_report_1735389182.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client.get_part_zip_archive(file_path).unwrap();
+        let _ = testops_api_client.get_part_zip_archive(&file_path).unwrap();
     }
 
     #[test]
@@ -299,7 +299,7 @@ mod tests {
         ));
         let exp_err = "Нужен файл с расширением .zip, был передан файл: *.\"json\"".to_string();
         let act_err = testops_api_client
-            .get_part_zip_archive(file_path)
+            .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();
         assert_eq!(act_err, exp_err, "Не получили ошибку для файла *.json");
@@ -313,7 +313,7 @@ mod tests {
             "{}/test_files/empty_files.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client.get_part_zip_archive(file_path).unwrap();
+        let _ = testops_api_client.get_part_zip_archive(&file_path).unwrap();
     }
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
             Получили ошибку: Os { code: 21, kind: IsADirectory, message: \"Is a directory\" }"
             .to_string();
         let act_err = testops_api_client
-            .get_part_zip_archive(file_path)
+            .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();
         assert_eq!(act_err, exp_err, "Не получили ошибку про директорию");
@@ -341,7 +341,7 @@ mod tests {
             Получили ошибку: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }"
             .to_string();
         let act_err = testops_api_client
-            .get_part_zip_archive(file_path)
+            .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();
         assert_eq!(
