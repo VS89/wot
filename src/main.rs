@@ -1,6 +1,12 @@
 use clap::{Args, Parser, Subcommand};
+use directories::UserDirs;
+use serde::Deserialize;
+use serde::Serialize;
 use std::env;
 use std::fs;
+use std::fs::File;
+use std::io;
+use std::path::PathBuf;
 use tokio;
 use wot::external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use wot::zip_directory;
@@ -43,6 +49,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Загрузка отчета в тестопс
     Report(ReportArgs),
 }
 
@@ -52,17 +59,97 @@ struct ReportArgs {
     #[arg(long, short, required = true)]
     directory_path: String,
     /// ID проекта
-    #[arg(long, short, required = true)]
+    #[arg(long, short, required = true, value_parser = validate_project_id)]
     project_id: u32,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+/// Данные, которые нужны для корректной работы приложения
+struct Application {
+    /// Базовый API url, чаще всего http://<host_url>/api/rs
+    testops_base_api_url: String,
+    /// HOST url(может отличаться от host_url для API)
+    testops_base_url: String,
+    /// Токен для авторизации в API TestOps
+    testops_api_token: String,
+}
+
+impl Application {
+    /// Создаем конфиг приложения
+    fn new() -> Self {
+        // todo тут нужно проверить что нету конфига с заполненными данными
+        // Если он есть и все данные заполнены, то скипать этот шаг
+        //
+        // todo наверно сюда стоит прикрутить все-таки какую-то базовую валидацию
+        //
+        // todo и надо будет вынести это все в отдельный файлик
+        //
+        // todo думаю надо будет прям тут создать 3 приватных функцию на 3 параметра
+        // конфига
+        println!("Введите url для testops API(пример: http://<url>/api/rs):");
+        let mut testops_base_api_url = String::new();
+        io::stdin()
+            .read_line(&mut testops_base_api_url)
+            .expect("Не смогли прочитать строку");
+        println!("Введите host url testops(где отображается список проектов)");
+        let mut testops_base_url = String::new();
+        io::stdin()
+            .read_line(&mut testops_base_url)
+            .expect("Не смогли прочитать строку");
+        println!("Введите testops API ключ");
+        let mut testops_api_token = String::new();
+        io::stdin()
+            .read_line(&mut testops_api_token)
+            .expect("Не смогли прочитать строку");
+        println!("Для просмотра доступных команд введите: wot --help");
+        Self {
+            testops_base_api_url: testops_base_api_url.trim().to_string(),
+            testops_base_url: testops_base_url.trim().to_string(),
+            testops_api_token: testops_api_token.trim().to_string(),
+        }
+    }
+
+    /// Получаем данные из конфига приложения
+    ///
+    /// Параметры:
+    /// - path_to_config: путь до конифга приложения
+    fn get_from_config(path_to_config: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = File::open(path_to_config)?;
+        let config: Self = serde_json::from_reader(file)
+            .expect("Получили ошибку при чтение файла по пути: {path_to_config}");
+        Ok(config)
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
+    if let Some(user_dirs) = UserDirs::new() {
+        let path = user_dirs.home_dir().join(".config/wot/config1122.json");
+        if path.exists() {
+            let _ = Application::get_from_config(path)?;
+            let cli = Cli::parse();
 
-    match &cli.command {
-        Commands::Report(value) => send_report(&value.directory_path, value.project_id).await?,
+            match &cli.command {
+                Commands::Report(value) => {
+                    send_report(&value.directory_path, value.project_id).await?
+                }
+            }
+        } else {
+            let app = Application::new();
+            let file = File::create(path)?;
+            serde_json::to_writer_pretty(file, &app).expect("Не смогли создать конфиг")
+        }
     }
     Ok(())
 }
 // /Users/valentins/Desktop/test_allure_report
+
+// Валидация параметра project_id. В целом простую валидацю параметра описывать не обязательно,
+// ее отлично выполняет clap
+// Надо бы еще прикрутить, чтобы тут брались id проектов из тестопса и показывало какие данные можно вводить
+fn validate_project_id(value: &str) -> Result<u32, String> {
+    let project_id: u32 = value
+        .parse()
+        .map_err(|_| format!("project_id должен быть целым числом > 0"))?;
+    Ok(project_id)
+}
