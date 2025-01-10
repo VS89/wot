@@ -1,5 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use directories::UserDirs;
+use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
 use std::env;
@@ -8,6 +9,7 @@ use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 use tokio;
+use uuid::Uuid;
 use wot::external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use wot::zip_directory;
 // https://github.com/clap-rs/clap?tab=readme-ov-file
@@ -109,6 +111,23 @@ impl Application {
         }
     }
 
+    /// Введенная строка должна быть URL
+    fn validate_url(value: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let regex = Regex::new(r"^https?://.+$").unwrap();
+        if !regex.is_match(value) {
+            return Err("Введенная строка должна быть URL".into());
+        }
+        Ok(true)
+    }
+
+    /// Валидация параметра testops_api_token
+    fn validate_testops_api_token(value: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        if !Uuid::parse_str(value).is_ok() {
+            return Err("Ваш токен не прошел валидацию, попробуйте еще раз".into());
+        }
+        Ok(true)
+    }
+
     /// Получаем данные из конфига приложения
     ///
     /// Параметры:
@@ -152,4 +171,55 @@ fn validate_project_id(value: &str) -> Result<u32, String> {
         .parse()
         .map_err(|_| format!("project_id должен быть целым числом > 0"))?;
     Ok(project_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    // todo видимо в main нельзя хранить тесты они почему то не запускаются если их пачкой запускать
+    // или через cargo test
+
+    /// Валидный URL
+    #[test_case("http://some_domen.ru/api/rs"; "http")]
+    #[test_case("https://example.com"; "https")]
+    fn test_valid_url(url: &str) {
+        let res = Application::validate_url(url).unwrap();
+        assert!(res, "Ожидали, что URL '{url}' пройдет валидацию");
+    }
+
+    /// НЕвалидный URL
+    #[test_case(""; "empty string")]
+    #[test_case("htttp://google.com"; "invalid url")]
+    fn test_invalid_url(url: &str) {
+        let res = Application::validate_url(url).unwrap_err().to_string();
+        assert_eq!(
+            res, "Введенная строка должна быть URL",
+            "Ожидали что URL: '{url}' НЕ пройдет валидацию и мы получим сообщение об ошибке"
+        );
+    }
+
+    /// Валидный testops api token
+    #[test]
+    fn test_testops_api_token_valid() {
+        let uuid_token = Uuid::new_v4().to_string();
+        let res = Application::validate_testops_api_token(&uuid_token).unwrap();
+        assert!(
+            res,
+            "Ожидали, что api_token: {} пройдет валидацию",
+            uuid_token
+        );
+    }
+
+    /// НЕвалидный testops api token
+    #[test_case(""; "empty token")]
+    #[test_case("c4e42f15-5b22-6ae-b2-10b5e2ffcb14"; "invalid uuid token")]
+    fn test_testops_validate_api_token_invalid(value: &str) {
+        let res = Application::validate_testops_api_token(&value)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(res, "Ваш токен не прошел валидацию, попробуйте еще раз",
+            "Ожидали что api token: '{value}' НЕ пройдет валидацию и мы получим сообщение об ошибке");
+    }
 }
