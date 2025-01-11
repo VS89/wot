@@ -233,7 +233,6 @@ pub struct LaunchInfo {
     name: String,
     project_id: u32,
 }
-// {"launchId":42369,"testSessionId":112014,"filesCount":56}
 
 impl LaunchInfo {
     pub fn new(name: &str, project_id: u32) -> Self {

@@ -1,21 +1,44 @@
+pub mod cli_app;
+pub mod config;
 pub mod external_api;
 
+use config::Config;
 use directories::UserDirs;
 
+use external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use std::error::Error;
 use std::fs::{self, read_dir, File};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 
-/// Структура конфигурации приложения
-#[derive(Debug)]
-pub struct Config {
-    pub testops_base_api_url: String,
-    pub testops_base_url: String,
-    pub testops_api_token: String,
+/// Sending report to TestOps
+pub async fn send_report(
+    path_to_report_directory: &str,
+    project_id: u32,
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let result = zip_directory(path_to_report_directory)?;
+    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
+    let launch_info = LaunchInfo::new(&format!("Запуск от {}", generate_launch_name), project_id);
+    let response: ResponseLaunchUpload = match testops
+        .post_archive_report_launch_upload(&result, launch_info)
+        .await
+    {
+        Ok(value) => value,
+        Err(e) => {
+            let _ = fs::remove_file(&result);
+            return Err(e);
+        }
+    };
+    println!(
+        "Ссылка на загруженный лаунч: {}/launch/{}",
+        config.testops_base_url, response.launch_id
+    );
+    let _ = fs::remove_file(&result);
+    Ok(())
 }
 
 /// Получаем директорию для архива
