@@ -215,8 +215,84 @@ impl TestopsApiClient {
             .into()),
         }
     }
+
+    /// Получение списка всех проектов
+    pub async fn get_all_projects(self) -> Result<ResponseGetAllProject, Box<dyn Error>> {
+        let response = self.get("/project".to_string(), None).await?;
+        if response.is_empty() {
+            return Err("Получили пустой ответ в ответе метода /project".into());
+        }
+        match serde_json::from_str(&response) {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                Err(format!("При парсинге ответа метода /project получили ошибку {}", e).into())
+            }
+        }
+    }
+}
+// {
+//   "totalElements": 0,
+//   "totalPages": 0,
+//   "pageable": {
+//     "paged": true,
+//     "pageNumber": 0,
+//     "pageSize": 0,
+//     "sort": [
+//       {
+//         "direction": "string",
+//         "nullHandling": "string",
+//         "ascending": true,
+//         "property": "string",
+//         "ignoreCase": true
+//       }
+//     ],
+//     "offset": 0,
+//     "unpaged": true
+//   },
+//   "first": true,
+//   "last": true,
+//   "sort": [
+//     {
+//       "direction": "string",
+//       "nullHandling": "string",
+//       "ascending": true,
+//       "property": "string",
+//       "ignoreCase": true
+//     }
+//   ],
+//   "size": 0,
+//   "content": [
+//     {
+//       "id": 0,
+//       "name": "string",
+//       "abbr": "string",
+//       "isPublic": true,
+//       "favorite": true,
+//       "description": "string",
+//       "descriptionHtml": "string",
+//       "createdDate": 0,
+//       "lastModifiedDate": 0,
+//       "createdBy": "string",
+//       "lastModifiedBy": "string"
+//     }
+//   ],
+//   "number": 0,
+//   "numberOfElements": 0,
+//   "empty": true
+// }
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectInfo {
+    pub id: u32,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponseGetAllProject {
+    pub total_pages: u32,
+    pub content: Vec<ProjectInfo>,
+}
 // https://serde.rs/enum-representations.html брал пример отсюда
 #[derive(Deserialize, Serialize, Debug)]
 // чтобы преобразовать camelCase в snake_case
@@ -255,6 +331,8 @@ pub struct ResponseLaunchUpload {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     #[tokio::test]
@@ -273,6 +351,16 @@ mod tests {
             .post_archive_report_launch_upload(&path_archive, launch_info)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_all_projetc_ids() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let resp = testops_api_client.get_all_projects().await.unwrap();
+        let _ = std::fs::write(
+            Path::new(&"/Users/valentins/Desktop/rust_projects/plugin_testops/log.log"),
+            serde_json::to_string_pretty(&resp).unwrap().as_bytes(),
+        );
     }
 
     #[test]
