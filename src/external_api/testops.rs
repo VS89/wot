@@ -1,11 +1,12 @@
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Асинхронный API клиент для TestOps
 pub struct TestopsApiClient {
     headers: HeaderMap,
@@ -217,69 +218,44 @@ impl TestopsApiClient {
     }
 
     /// Получение списка всех проектов
-    pub async fn get_all_projects(self) -> Result<ResponseGetAllProject, Box<dyn Error>> {
-        let response = self.get("/project".to_string(), None).await?;
-        if response.is_empty() {
-            return Err("Получили пустой ответ в ответе метода /project".into());
-        }
-        match serde_json::from_str(&response) {
-            Ok(value) => Ok(value),
-            Err(e) => {
-                Err(format!("При парсинге ответа метода /project получили ошибку {}", e).into())
+    pub async fn get_all_projects(self) -> Result<HashSet<u32>, Box<dyn Error>> {
+        let mut current_page: u32 = 0;
+        let limit_pages: u32 = 50;
+        let mut project_ids: HashSet<u32> = HashSet::new();
+        loop {
+            let response = self
+                .clone()
+                .get(format!("/project?page={}", current_page), None)
+                .await?;
+            if response.is_empty() {
+                return Err("Получили пустой ответ в ответе метода /project".into());
             }
+            let resp_get_all_project =
+                match serde_json::from_str::<ResponseGetAllProject>(&response) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        return Err(format!(
+                            "При парсинге ответа метода /project получили ошибку {}",
+                            e
+                        )
+                        .into())
+                    }
+                };
+            if resp_get_all_project.total_pages < (current_page + 1) || current_page >= limit_pages
+            {
+                break;
+            };
+            project_ids.extend(
+                resp_get_all_project
+                    .content
+                    .iter()
+                    .map(|project_info| project_info.id),
+            );
+            current_page += 1;
         }
+        Ok(project_ids)
     }
 }
-// {
-//   "totalElements": 0,
-//   "totalPages": 0,
-//   "pageable": {
-//     "paged": true,
-//     "pageNumber": 0,
-//     "pageSize": 0,
-//     "sort": [
-//       {
-//         "direction": "string",
-//         "nullHandling": "string",
-//         "ascending": true,
-//         "property": "string",
-//         "ignoreCase": true
-//       }
-//     ],
-//     "offset": 0,
-//     "unpaged": true
-//   },
-//   "first": true,
-//   "last": true,
-//   "sort": [
-//     {
-//       "direction": "string",
-//       "nullHandling": "string",
-//       "ascending": true,
-//       "property": "string",
-//       "ignoreCase": true
-//     }
-//   ],
-//   "size": 0,
-//   "content": [
-//     {
-//       "id": 0,
-//       "name": "string",
-//       "abbr": "string",
-//       "isPublic": true,
-//       "favorite": true,
-//       "description": "string",
-//       "descriptionHtml": "string",
-//       "createdDate": 0,
-//       "lastModifiedDate": 0,
-//       "createdBy": "string",
-//       "lastModifiedBy": "string"
-//     }
-//   ],
-//   "number": 0,
-//   "numberOfElements": 0,
-//   "empty": true
-// }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -331,7 +307,6 @@ pub struct ResponseLaunchUpload {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
 
     use super::*;
 
@@ -357,10 +332,7 @@ mod tests {
     async fn test_get_all_projetc_ids() {
         let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let resp = testops_api_client.get_all_projects().await.unwrap();
-        let _ = std::fs::write(
-            Path::new(&"/Users/valentins/Desktop/rust_projects/plugin_testops/log.log"),
-            serde_json::to_string_pretty(&resp).unwrap().as_bytes(),
-        );
+        assert!(resp.contains(&2), "Не нашли проект с id == 2");
     }
 
     #[test]
