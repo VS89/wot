@@ -218,7 +218,7 @@ impl TestopsApiClient {
     }
 
     /// Получение списка всех проектов
-    pub async fn get_all_projects(self) -> Result<HashSet<u32>, Box<dyn Error>> {
+    pub async fn get_all_project_ids(self) -> Result<HashSet<u32>, Box<dyn Error>> {
         let mut current_page: u32 = 0;
         let limit_pages: u32 = 50;
         let mut project_ids: HashSet<u32> = HashSet::new();
@@ -331,7 +331,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_all_projetc_ids() {
         let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
-        let resp = testops_api_client.get_all_projects().await.unwrap();
+        let resp = testops_api_client.get_all_project_ids().await.unwrap();
         assert!(resp.contains(&2), "Не нашли проект с id == 2");
     }
 
