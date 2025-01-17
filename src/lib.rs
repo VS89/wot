@@ -5,7 +5,8 @@ pub mod external_api;
 use config::Config;
 use directories::UserDirs;
 
-use external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
+use external_api::testops::{self, LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs::{self, read_dir, File};
 use std::io::{Read, Write};
@@ -19,6 +20,7 @@ pub async fn send_report(
     project_id: u32,
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    validate_project_id(&project_id, config).await?;
     let result = zip_directory(path_to_report_directory)?;
     let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
     let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
@@ -57,6 +59,15 @@ fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {
         }
     } else {
         return Err("Не удалось получить каталоги пользователя".into());
+    }
+}
+
+async fn validate_project_id(project_id: &u32, config: &Config) -> Result<bool, Box<dyn Error>> {
+    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let set_project_ids: HashSet<u32> = testops.get_all_project_ids().await?;
+    match set_project_ids.contains(project_id) {
+        true => Ok(true),
+        false => Err(format!("Project with ID == {} not found", project_id).into()),
     }
 }
 
@@ -106,6 +117,33 @@ pub fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, Box<dyn Error>
 mod tests {
     use super::*;
     use regex::Regex;
+    use std::path::Path;
+
+    #[tokio::test]
+    async fn test_validate_project_id_exist() {
+        let path: &Path = Path::new("/Users/valentins/.config/wot/test_config.json");
+        let config = Config::get_config(path.to_path_buf()).unwrap();
+        let project_id_exist: u32 = 2;
+        let res = validate_project_id(&project_id_exist, &config)
+            .await
+            .unwrap();
+        assert!(res, "Не нашли проект с id == {}", project_id_exist);
+    }
+
+    #[tokio::test]
+    async fn test_validate_project_id_nonexist() {
+        let path: &Path = Path::new("/Users/valentins/.config/wot/test_config.json");
+        let config = Config::get_config(path.to_path_buf()).unwrap();
+        let project_id_nonexist: u32 = 28888;
+        let res = validate_project_id(&project_id_nonexist, &config)
+            .await
+            .unwrap_err()
+            .to_string();
+        assert_eq!(
+            res,
+            format!("Project with ID == {} not found", project_id_nonexist)
+        );
+    }
 
     #[test]
     /// Получение директории до файла с архивом результатов
