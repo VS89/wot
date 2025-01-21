@@ -5,7 +5,7 @@ pub mod external_api;
 use config::Config;
 use directories::UserDirs;
 
-use external_api::testops::{self, LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
+use external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::{self, read_dir, File};
@@ -21,6 +21,20 @@ pub async fn send_report(
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
     validate_project_id(&project_id, config).await?;
+    let confirm_flag = confirm_upload_to_project(&project_id, config).await?;
+    if !confirm_flag {
+        return Ok(());
+    }
+    // todo эта функция пока криво работает, не могу понять почему
+    // при том что если дергать отдельно апи метод, то все ок в тестах
+    // match confirm_upload_to_project(&project_id, config).await {
+    //     Ok(value) => {
+    //         if value == false {
+    //             return Ok(());
+    //         }
+    //     }
+    //     Err(e) => return Err(e),
+    // };
     let result = zip_directory(path_to_report_directory)?;
     let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
     let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
@@ -36,7 +50,7 @@ pub async fn send_report(
         }
     };
     println!(
-        "Ссылка на загруженный лаунч: {}/launch/{}",
+        "Link to downloaded lunch: {}/launch/{}",
         config.testops_base_url, response.launch_id
     );
     let _ = fs::remove_file(&result);
@@ -68,6 +82,35 @@ async fn validate_project_id(project_id: &u32, config: &Config) -> Result<bool, 
     match set_project_ids.contains(project_id) {
         true => Ok(true),
         false => Err(format!("Project with ID == {} not found", project_id).into()),
+    }
+}
+
+/// Подтверждение загрузки отчета в проект
+async fn confirm_upload_to_project(
+    project_id: &u32,
+    config: &Config,
+) -> Result<bool, Box<dyn Error>> {
+    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let project_info = testops.get_project_info_by_id(project_id).await?;
+
+    let message = format!(
+        "You want to load a report into a project: '{}' [y/n]? ",
+        project_info.name
+    );
+    let mut stdout = std::io::stdout();
+    stdout
+        .write_all(message.as_bytes())
+        .expect("Failed to write to stdout");
+    stdout.flush().expect("Failed to flush stdout");
+
+    let mut confirmantion = String::new();
+    std::io::stdin().read_line(&mut confirmantion)?;
+
+    let trim_lowercase_confirmation = confirmantion.trim().to_lowercase();
+    if trim_lowercase_confirmation == "y" || trim_lowercase_confirmation == "yes" {
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }
 

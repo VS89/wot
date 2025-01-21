@@ -255,12 +255,32 @@ impl TestopsApiClient {
         }
         Ok(project_ids)
     }
+
+    /// Получение информации о проекте по его ID
+    pub async fn get_project_info_by_id(
+        self,
+        project_id: &u32,
+    ) -> Result<ProjectInfo, Box<dyn Error>> {
+        let response = self.get(format!("/project/{}", project_id), None).await?;
+        if response.is_empty() {
+            return Err("Получили пустой ответ в ответе метода /project/<id>".into());
+        }
+        match serde_json::from_str::<ProjectInfo>(&response) {
+            Ok(value) => Ok(value),
+            Err(e) => Err(format!(
+                "При парсинге ответа метода /project/<id> получили ошибку {}",
+                e
+            )
+            .into()),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectInfo {
     pub id: u32,
+    pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -329,10 +349,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_all_projetc_ids() {
+    async fn test_get_all_project_ids() {
         let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let resp = testops_api_client.get_all_project_ids().await.unwrap();
         assert!(resp.contains(&2), "Не нашли проект с id == 2");
+    }
+
+    #[tokio::test]
+    async fn test_get_project_by_id() {
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let resp = testops_api_client.get_project_info_by_id(&2).await.unwrap();
+        assert_eq!("TestProject", resp.name);
     }
 
     #[test]
