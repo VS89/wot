@@ -9,6 +9,7 @@ use wot::send_report;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(user_dirs) = UserDirs::new() {
+        // todo не забыть поменять на просто config
         let path = user_dirs.home_dir().join(".config/wot/test_config.json");
         if path.exists() {
             let config = Config::get_config(path)?;

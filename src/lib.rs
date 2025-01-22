@@ -25,18 +25,8 @@ pub async fn send_report(
     if !confirm_flag {
         return Ok(());
     }
-    // todo эта функция пока криво работает, не могу понять почему
-    // при том что если дергать отдельно апи метод, то все ок в тестах
-    // match confirm_upload_to_project(&project_id, config).await {
-    //     Ok(value) => {
-    //         if value == false {
-    //             return Ok(());
-    //         }
-    //     }
-    //     Err(e) => return Err(e),
-    // };
     let result = zip_directory(path_to_report_directory)?;
-    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
     let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
     let launch_info = LaunchInfo::new(&format!("Запуск от {}", generate_launch_name), project_id);
     let response: ResponseLaunchUpload = match testops
@@ -60,24 +50,21 @@ pub async fn send_report(
 /// Получаем директорию для архива
 fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {
     if let Some(user_dirs) = UserDirs::new() {
-        if let Some(desktop_dir) = user_dirs.desktop_dir() {
-            Ok(desktop_dir.join(format!(
-                "testops_results_report_{}.zip",
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            )))
-        } else {
-            return Err("Не смогли найти путь до рабочего стола".into());
-        }
+        let archive_name = format!(
+            "testops_results_report_{}.zip",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
+        Ok(user_dirs.home_dir().join(".config/wot").join(archive_name))
     } else {
         return Err("Не удалось получить каталоги пользователя".into());
     }
 }
 
 async fn validate_project_id(project_id: &u32, config: &Config) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
     let set_project_ids: HashSet<u32> = testops.get_all_project_ids().await?;
     match set_project_ids.contains(project_id) {
         true => Ok(true),
@@ -90,7 +77,7 @@ async fn confirm_upload_to_project(
     project_id: &u32,
     config: &Config,
 ) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config.testops_base_api_url.to_string());
+    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
     let project_info = testops.get_project_info_by_id(project_id).await?;
 
     let message = format!(

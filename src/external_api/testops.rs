@@ -12,6 +12,7 @@ pub struct TestopsApiClient {
     headers: HeaderMap,
     pub base_url: String,
     client: reqwest::Client,
+    postfix_after_base_url: String,
 }
 
 impl TestopsApiClient {
@@ -40,6 +41,7 @@ impl TestopsApiClient {
             headers: auth_header,
             base_url,
             client: reqwest::Client::new(),
+            postfix_after_base_url: "/api/rs".to_string(),
         }
     }
 
@@ -60,7 +62,10 @@ impl TestopsApiClient {
         };
         Ok(self
             .client
-            .get(format!("{}{}", self.base_url, endpoint))
+            .get(format!(
+                "{}{}{}",
+                self.base_url, self.postfix_after_base_url, endpoint
+            ))
             .headers(all_headers)
             .send()
             .await?
@@ -86,7 +91,10 @@ impl TestopsApiClient {
         };
         Ok(self
             .client
-            .post(format!("{}{}", self.base_url, endpoint))
+            .post(format!(
+                "{}{}{}",
+                self.base_url, self.postfix_after_base_url, endpoint
+            ))
             .headers(all_headers)
             .multipart(multipart)
             .send()
@@ -106,7 +114,10 @@ impl TestopsApiClient {
         headers.extend(self.headers);
         Ok(self
             .client
-            .post(format!("{}{}", self.base_url, endpoint))
+            .post(format!(
+                "{}{}{}",
+                self.base_url, self.postfix_after_base_url, endpoint
+            ))
             .headers(headers)
             .body(body)
             .send()
@@ -333,7 +344,7 @@ mod tests {
     #[tokio::test]
     /// Проверяем загрузку лаунча
     async fn test_upload_launch() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
         let launch_info = LaunchInfo {
             name: "check upload".to_string(),
             project_id: 2,
@@ -350,14 +361,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_project_ids() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
         let resp = testops_api_client.get_all_project_ids().await.unwrap();
         assert!(resp.contains(&2), "Не нашли проект с id == 2");
     }
 
     #[tokio::test]
     async fn test_get_project_by_id() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
+        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
         let resp = testops_api_client.get_project_info_by_id(&2).await.unwrap();
         assert_eq!("TestProject", resp.name);
     }
