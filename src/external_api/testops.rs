@@ -1,8 +1,8 @@
+use crate::Config;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -29,17 +29,16 @@ impl TestopsApiClient {
     // }
 
     /// Создание API клиента
-    pub fn new(base_url: String) -> Self {
-        let api_token = env::var("TESTOPS_API_TOKEN").unwrap();
+    pub fn new(config: &Config) -> Self {
         let mut auth_header = HeaderMap::new();
         auth_header.insert(
             "Authorization",
-            HeaderValue::from_str(format!("Api-Token {}", api_token).as_str())
+            HeaderValue::from_str(format!("Api-Token {}", config.testops_api_token).as_str())
                 .expect("Не смогли преобразовать HeaderValue"),
         );
         Self {
             headers: auth_header,
-            base_url,
+            base_url: config.testops_base_url.clone(),
             client: reqwest::Client::new(),
             postfix_after_base_url: "/api/rs".to_string(),
         }
@@ -340,11 +339,18 @@ pub struct ResponseLaunchUpload {
 mod tests {
 
     use super::*;
+    use std::env;
+    fn testops_api_client() -> TestopsApiClient {
+        let config = Config {
+            testops_base_url: env::var("TESTOPS_BASE_URL").unwrap(),
+            testops_api_token: env::var("TESTOPS_API_TOKEN").unwrap(),
+        };
+        TestopsApiClient::new(&config)
+    }
 
     #[tokio::test]
     /// Проверяем загрузку лаунча
     async fn test_upload_launch() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
         let launch_info = LaunchInfo {
             name: "check upload".to_string(),
             project_id: 2,
@@ -353,7 +359,7 @@ mod tests {
             "{}/test_files/testops_results_report_1735389182.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client
+        let _ = testops_api_client()
             .post_archive_report_launch_upload(&path_archive, launch_info)
             .await
             .unwrap();
@@ -361,15 +367,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_project_ids() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
-        let resp = testops_api_client.get_all_project_ids().await.unwrap();
+        let resp = testops_api_client().get_all_project_ids().await.unwrap();
         assert!(resp.contains(&2), "Не нашли проект с id == 2");
     }
 
     #[tokio::test]
     async fn test_get_project_by_id() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_URL").unwrap());
-        let resp = testops_api_client.get_project_info_by_id(&2).await.unwrap();
+        let resp = testops_api_client()
+            .get_project_info_by_id(&2)
+            .await
+            .unwrap();
         assert_eq!("TestProject", resp.name);
     }
 
@@ -377,25 +384,25 @@ mod tests {
     /// Проверяем, что функция get_part_zip_archive отрабатывает
     /// для архива .zip
     fn test_get_part_zip_archive() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let file_path = PathBuf::from(format!(
             "{}/test_files/testops_results_report_1735389182.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client.get_part_zip_archive(&file_path).unwrap();
+        let _ = testops_api_client()
+            .get_part_zip_archive(&file_path)
+            .unwrap();
     }
 
     #[test]
     /// Проверяем, что функция get_part_zip_archive отдает ошибку для файла, у которого
     /// расширение НЕ .zip
     fn test_get_part_zip_archive_for_json() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let file_path = PathBuf::from(format!(
             "{}/test_files/file.json",
             env!("CARGO_MANIFEST_DIR")
         ));
         let exp_err = "Нужен файл с расширением .zip, был передан файл: *.\"json\"".to_string();
-        let act_err = testops_api_client
+        let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();
@@ -405,24 +412,24 @@ mod tests {
     #[test]
     /// Проверяем, что функция get_part_zip_archive отрабатывает для пустого файла .zip
     fn test_get_part_zip_archive_empty_file() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let file_path = PathBuf::from(format!(
             "{}/test_files/empty_files.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client.get_part_zip_archive(&file_path).unwrap();
+        let _ = testops_api_client()
+            .get_part_zip_archive(&file_path)
+            .unwrap();
     }
 
     #[test]
     /// Проверяем, что функция get_part_zip_archive обрабатывает ошибку, если передается директория
     fn test_get_part_zip_archive_for_dir() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let file_path = PathBuf::from(format!("{}/test_files/", env!("CARGO_MANIFEST_DIR")));
         let exp_err = "Не смогли прочитать файл по пути: \
             \"/Users/valentins/Desktop/rust_projects/plugin_testops/test_files/\". \
             Получили ошибку: Os { code: 21, kind: IsADirectory, message: \"Is a directory\" }"
             .to_string();
-        let act_err = testops_api_client
+        let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();
@@ -432,12 +439,11 @@ mod tests {
     #[test]
     /// Проверяем, что функция get_part_zip_archive отрабатывает для пустого файла .zip
     fn test_get_part_zip_archive_empty_path() {
-        let testops_api_client = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
         let file_path = PathBuf::from("");
         let exp_err = "Не смогли прочитать файл по пути: \"\". \
             Получили ошибку: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }"
             .to_string();
-        let act_err = testops_api_client
+        let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
             .unwrap_err()
             .to_string();

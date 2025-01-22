@@ -26,7 +26,7 @@ pub async fn send_report(
         return Ok(());
     }
     let result = zip_directory(path_to_report_directory)?;
-    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
+    let testops = TestopsApiClient::new(config);
     let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
     let launch_info = LaunchInfo::new(&format!("Запуск от {}", generate_launch_name), project_id);
     let response: ResponseLaunchUpload = match testops
@@ -64,7 +64,7 @@ fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {
 }
 
 async fn validate_project_id(project_id: &u32, config: &Config) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
+    let testops = TestopsApiClient::new(config);
     let set_project_ids: HashSet<u32> = testops.get_all_project_ids().await?;
     match set_project_ids.contains(project_id) {
         true => Ok(true),
@@ -77,7 +77,7 @@ async fn confirm_upload_to_project(
     project_id: &u32,
     config: &Config,
 ) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config.testops_base_url.to_string());
+    let testops = TestopsApiClient::new(config);
     let project_info = testops.get_project_info_by_id(project_id).await?;
 
     let message = format!(
