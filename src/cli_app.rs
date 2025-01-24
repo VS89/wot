@@ -1,5 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 
+use crate::errors::WotError;
+
 #[derive(Parser)]
 #[command(
     name = "wot",
@@ -33,9 +35,7 @@ pub struct ReportArgs {
 // Валидация параметра project_id. В целом простую валидацю параметра описывать не обязательно,
 // ее отлично выполняет clap
 // Надо бы еще прикрутить, чтобы тут брались id проектов из тестопса и показывало какие данные можно вводить
-fn validate_project_id(value: &str) -> Result<u32, String> {
-    let project_id: u32 = value
-        .parse()
-        .map_err(|_| format!("project_id должен быть целым числом > 0"))?;
+fn validate_project_id(value: &str) -> Result<u32, WotError> {
+    let project_id: u32 = value.parse().map_err(|_| WotError::ProjectIdMoreThenZero)?;
     Ok(project_id)
 }

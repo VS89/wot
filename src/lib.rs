@@ -1,9 +1,11 @@
 pub mod cli_app;
 pub mod config;
+pub mod errors;
 pub mod external_api;
 
 use config::Config;
 use directories::UserDirs;
+use errors::WotError;
 
 use external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use std::collections::HashSet;
@@ -48,7 +50,7 @@ pub async fn send_report(
 }
 
 /// Получаем директорию для архива
-fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {
+fn get_dir_archive() -> Result<PathBuf, WotError> {
     if let Some(user_dirs) = UserDirs::new() {
         let archive_name = format!(
             "testops_results_report_{}.zip",
@@ -59,16 +61,19 @@ fn get_dir_archive() -> Result<PathBuf, Box<dyn Error>> {
         );
         Ok(user_dirs.home_dir().join(".config/wot").join(archive_name))
     } else {
-        return Err("Не удалось получить каталоги пользователя".into());
+        return Err(WotError::NotFoundUserDir);
     }
 }
 
-async fn validate_project_id(project_id: &u32, config: &Config) -> Result<bool, Box<dyn Error>> {
+async fn validate_project_id(
+    project_id: &u32,
+    config: &Config,
+) -> Result<bool, Box<dyn std::error::Error>> {
     let testops = TestopsApiClient::new(config);
     let set_project_ids: HashSet<u32> = testops.get_all_project_ids().await?;
     match set_project_ids.contains(project_id) {
         true => Ok(true),
-        false => Err(format!("Project with ID == {} not found", project_id).into()),
+        false => Err(WotError::ProjectIdNotFound(*project_id).into()),
     }
 }
 
@@ -116,7 +121,7 @@ pub fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, Box<dyn Error>
         .unix_permissions(0o755);
     let read_directory = match read_dir(path_to_report_dir) {
         Ok(value) => value,
-        _ => return Err(format!("Не нашли директорию по пути: <{:?}>", path_to_report_dir).into()),
+        _ => return Err(WotError::NotFoundDirByPath(path_to_report_dir.to_string()).into()),
     };
     for entry in read_directory {
         match entry {
@@ -129,7 +134,7 @@ pub fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, Box<dyn Error>
                     // Добавляем файл в ZIP-архив
                     let file_name_archive = match value.file_name().to_str() {
                         Some(file_name) => file_name.to_string(),
-                        None => return Err("Не смогли привести имя файла к строке".into()),
+                        None => return Err(WotError::ParseFileNameToStr.into()),
                     };
                     zip.start_file(format!("{}", file_name_archive).to_string(), options)?;
                     zip.write_all(&buffer)?;
@@ -239,8 +244,7 @@ mod tests {
     #[test]
     /// Проверяем архивацию несуществующей директории
     fn test_nonexistent() {
-        let expected_error =
-            "Не нашли директорию по пути: <\"nonexistent_dir_for_test\">".to_string();
+        let expected_error = "Не нашли директорию по пути: <nonexistent_dir_for_test>".to_string();
         let actual_error = zip_directory("nonexistent_dir_for_test");
         assert_eq!(
             expected_error,

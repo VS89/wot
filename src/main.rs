@@ -4,6 +4,7 @@ use std::fs::File;
 use tokio;
 use wot::cli_app::{Cli, Commands};
 use wot::config::Config;
+use wot::errors::WotError;
 use wot::send_report;
 
 #[tokio::main]
@@ -23,7 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             let app = Config::new()?;
             let file = File::create(path)?;
-            serde_json::to_writer_pretty(file, &app).expect("Не смогли создать конфиг")
+            serde_json::to_writer_pretty(file, &app)
+                .expect(WotError::CantCreateConfig.to_string().as_str())
         }
     }
     Ok(())

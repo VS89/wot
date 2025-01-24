@@ -1,3 +1,4 @@
+use crate::errors::{WotApiError, WotError};
 use crate::Config;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
@@ -34,7 +35,7 @@ impl TestopsApiClient {
         auth_header.insert(
             "Authorization",
             HeaderValue::from_str(format!("Api-Token {}", config.testops_api_token).as_str())
-                .expect("Не смогли преобразовать HeaderValue"),
+                .expect(&WotError::ParseHeaderValue.to_string()),
         );
         Self {
             headers: auth_header,
@@ -132,9 +133,9 @@ impl TestopsApiClient {
     ) -> Result<multipart::Part, Box<dyn Error>> {
         // Читаем массив байтов
         let file_to_bytes = std::fs::read(&full_file_path_to_archive).map_err(|e| {
-            format!(
-                "Не смогли прочитать файл по пути: {:?}. Получили ошибку: {:?}",
-                &full_file_path_to_archive, e
+            WotError::NotReadFile(
+                full_file_path_to_archive.to_str().unwrap().to_string(),
+                e.to_string(),
             )
         })?;
         // Проверяем, что расширение файла == zip
@@ -143,33 +144,20 @@ impl TestopsApiClient {
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
         if extension_file != "zip" {
-            return Err(format!(
-                "Нужен файл с расширением .zip, был передан файл: *.{:?}",
-                extension_file
-            )
-            .into());
+            return Err(WotError::ExtensionZip(extension_file.to_string()).into());
         };
         // Получаем имя файла из переданного пути
         let file_name = &full_file_path_to_archive
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or_else(|| {
-                format!(
-                    "Не удалось получить имя файла из пути: {:?}",
-                    &full_file_path_to_archive
-                )
+                WotError::NotFileName(full_file_path_to_archive.to_str().unwrap().to_string())
             })?;
         // Формируем и возвращаем Part для zip архива
         multipart::Part::bytes(file_to_bytes)
             .file_name(file_name.to_string())
             .mime_str("application/zip")
-            .map_err(|e| {
-                format!(
-                    "Не смогли преобразовать файл {:?} для API-запроса. Ошибка: {:?}",
-                    file_name, e
-                )
-                .into()
-            })
+            .map_err(|e| WotApiError::Multipart(file_name.to_string(), e.to_string()).into())
     }
 
     // todo надо нормально допилить этот момент и разобраться как структуры записывать в файл, чтобы дебажить
@@ -179,13 +167,13 @@ impl TestopsApiClient {
     ) -> Result<GetLauncByIdResponce, Box<dyn Error>> {
         let response = self.get(format!("/launch/{}", launch_id), None).await?;
         if response.is_empty() {
-            return Err("Получили пустой ответ от метода /launch/[launch_id]".into());
+            return Err(WotApiError::EmptyResponse("/launch/[launch_id]".to_string()).into());
         }
         match serde_json::from_str(&response) {
             Ok(value) => Ok(value),
-            Err(e) => Err(format!(
-                "При парсинге ответа метода /launch/[launch_id] получили ошибку: {}",
-                e
+            Err(e) => Err(WotApiError::ParsingResponse(
+                "/launch/[launch_id]".to_string(),
+                e.to_string(),
             )
             .into()),
         }
@@ -215,13 +203,13 @@ impl TestopsApiClient {
             .post_with_file("/launch/upload".to_string(), multipart_form, None)
             .await?;
         if response.is_empty() {
-            return Err("Получили пустой ответ в ответе метода /launch/upload".into());
+            return Err(WotApiError::EmptyResponse("/launch/upload".to_string()).into());
         }
         match serde_json::from_str(&response) {
             Ok(value) => Ok(value),
-            Err(e) => Err(format!(
-                "При парсинге ответа метода /launch/upload получили ошибку {}",
-                e
+            Err(e) => Err(WotApiError::ParsingResponse(
+                "/launch/upload".to_string(),
+                e.to_string(),
             )
             .into()),
         }
@@ -238,15 +226,15 @@ impl TestopsApiClient {
                 .get(format!("/project?page={}", current_page), None)
                 .await?;
             if response.is_empty() {
-                return Err("Получили пустой ответ в ответе метода /project".into());
+                return Err(WotApiError::EmptyResponse("/project".to_string()).into());
             }
             let resp_get_all_project =
                 match serde_json::from_str::<ResponseGetAllProject>(&response) {
                     Ok(value) => value,
                     Err(e) => {
-                        return Err(format!(
-                            "При парсинге ответа метода /project получили ошибку {}",
-                            e
+                        return Err(WotApiError::ParsingResponse(
+                            "/project".to_string(),
+                            e.to_string(),
                         )
                         .into())
                     }
@@ -273,15 +261,13 @@ impl TestopsApiClient {
     ) -> Result<ProjectInfo, Box<dyn Error>> {
         let response = self.get(format!("/project/{}", project_id), None).await?;
         if response.is_empty() {
-            return Err("Получили пустой ответ в ответе метода /project/<id>".into());
+            return Err(WotApiError::EmptyResponse("/project/<id>".to_string()).into());
         }
         match serde_json::from_str::<ProjectInfo>(&response) {
             Ok(value) => Ok(value),
-            Err(e) => Err(format!(
-                "При парсинге ответа метода /project/<id> получили ошибку {}",
-                e
-            )
-            .into()),
+            Err(e) => {
+                Err(WotApiError::ParsingResponse("/project/<id>".to_string(), e.to_string()).into())
+            }
         }
     }
 }
@@ -401,7 +387,7 @@ mod tests {
             "{}/test_files/file.json",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let exp_err = "Нужен файл с расширением .zip, был передан файл: *.\"json\"".to_string();
+        let exp_err = "Нужен файл с расширением .zip, был передан файл: *.json".to_string();
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
             .unwrap_err()
@@ -427,7 +413,7 @@ mod tests {
         let file_path = PathBuf::from(format!("{}/test_files/", env!("CARGO_MANIFEST_DIR")));
         let exp_err = "Не смогли прочитать файл по пути: \
             \"/Users/valentins/Desktop/rust_projects/plugin_testops/test_files/\". \
-            Получили ошибку: Os { code: 21, kind: IsADirectory, message: \"Is a directory\" }"
+            Получили ошибку: Is a directory (os error 21)"
             .to_string();
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
@@ -441,7 +427,7 @@ mod tests {
     fn test_get_part_zip_archive_empty_path() {
         let file_path = PathBuf::from("");
         let exp_err = "Не смогли прочитать файл по пути: \"\". \
-            Получили ошибку: Os { code: 2, kind: NotFound, message: \"No such file or directory\" }"
+            Получили ошибку: No such file or directory (os error 2)"
             .to_string();
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)

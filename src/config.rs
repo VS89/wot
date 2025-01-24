@@ -1,6 +1,8 @@
+use crate::errors::WotError;
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
+use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::path::PathBuf;
@@ -16,13 +18,13 @@ pub struct Config {
 
 impl Config {
     /// Создаем конфиг приложения
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
         println!("Enter the url of the testops instance: ");
         let testops_base_url = validate_url(get_data_from_user_input())?;
 
         println!("Enter the TestOps API key");
         let testops_api_token = get_data_from_user_input();
-        let _ = validate_testops_api_token(&testops_api_token);
+        let _ = validate_testops_api_token(&testops_api_token)?;
         println!("To view the available commands, type: wot --help");
 
         Ok(Self {
@@ -35,19 +37,20 @@ impl Config {
     ///
     /// Параметры:
     /// - path_to_config: путь до конифга приложения
-    pub fn get_config(path_to_config: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn get_config(path_to_config: PathBuf) -> Result<Self, Box<dyn Error>> {
         let file = File::open(path_to_config)?;
-        let config: Self = serde_json::from_reader(file)
-            .expect("Получили ошибку при чтение файла по пути: {path_to_config}");
-        Ok(config)
+        match serde_json::from_reader(file) {
+            Ok(config) => Ok(config),
+            Err(_) => Err(WotError::NotParseConfig.into()),
+        }
     }
 }
 
 /// Введенная строка должна быть URL
-fn validate_url(mut value: String) -> Result<String, Box<dyn std::error::Error>> {
+fn validate_url(mut value: String) -> Result<String, WotError> {
     let regex = Regex::new(r"^https?://.+$").unwrap();
     if !regex.is_match(&value) {
-        return Err("Введенная строка должна быть URL".into());
+        return Err(WotError::InvalidURL);
     }
     if value.chars().last().unwrap() == '/' {
         value.pop();
@@ -56,9 +59,9 @@ fn validate_url(mut value: String) -> Result<String, Box<dyn std::error::Error>>
 }
 
 /// Валидация параметра testops_api_token
-fn validate_testops_api_token(value: &str) -> Result<bool, Box<dyn std::error::Error>> {
+fn validate_testops_api_token(value: &str) -> Result<bool, WotError> {
     if !Uuid::parse_str(value).is_ok() {
-        return Err("Ваш токен не прошел валидацию, попробуйте еще раз".into());
+        return Err(WotError::InvalidToken);
     }
     Ok(true)
 }
@@ -67,7 +70,7 @@ fn get_data_from_user_input() -> String {
     let mut input_value = String::new();
     io::stdin()
         .read_line(&mut input_value)
-        .expect("Couldn't read the line");
+        .expect(WotError::CouldReadLine.to_string().as_str());
     input_value.trim().to_string()
 }
 
@@ -114,5 +117,15 @@ mod tests {
         let res = validate_testops_api_token(&value).unwrap_err().to_string();
         assert_eq!(res, "Ваш токен не прошел валидацию, попробуйте еще раз",
             "Ожидали что api token: '{value}' НЕ пройдет валидацию и мы получим сообщение об ошибке");
+    }
+
+    #[test]
+    fn test_get_config_by_invalid_path() {
+        let path: PathBuf = PathBuf::from(format!(
+            "{}/test_files/empty_config_for_test.json",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        let error = Config::get_config(path).unwrap_err();
+        assert_eq!("Не смогли распарсить конфиг", error.to_string());
     }
 }
