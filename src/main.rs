@@ -1,17 +1,22 @@
 use clap::Parser;
 use directories::UserDirs;
 use std::fs::File;
+use std::path::Path;
 use tokio;
 use wot::cli_app::{Cli, Commands};
 use wot::config::Config;
+use wot::constants::CONFIG_DIR;
 use wot::errors::WotError;
 use wot::send_report;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config_path = Path::new("config.json");
+    if cfg!(debug_assertions) {
+        config_path = Path::new("test_config.json");
+    }
     if let Some(user_dirs) = UserDirs::new() {
-        // todo не забыть поменять на просто config
-        let path = user_dirs.home_dir().join(".config/wot/test_config.json");
+        let path = user_dirs.home_dir().join(CONFIG_DIR).join(config_path);
         if path.exists() {
             let config = Config::get_config(path)?;
             let cli = Cli::parse();

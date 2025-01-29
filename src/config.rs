@@ -1,3 +1,4 @@
+use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
 use crate::errors::WotError;
 use regex::Regex;
 use serde::Deserialize;
@@ -19,13 +20,13 @@ pub struct Config {
 impl Config {
     /// Создаем конфиг приложения
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        println!("Enter the url of the testops instance: ");
+        println!("{}", ENTER_INSTANCE_URL_TESTOPS);
         let testops_base_url = validate_url(get_data_from_user_input())?;
 
-        println!("Enter the TestOps API key");
+        println!("{}", ENTER_TESTOPS_API_KEY);
         let testops_api_token = get_data_from_user_input();
         let _ = validate_testops_api_token(&testops_api_token)?;
-        println!("To view the available commands, type: wot --help");
+        println!("{}", COMPLETE_SETUP);
 
         Ok(Self {
             testops_base_url,

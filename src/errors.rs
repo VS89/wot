@@ -1,5 +1,8 @@
 use std::fmt;
 
+pub const FAILED_WRITE_STDOUT: &'static str = "Failed to write to stdout";
+pub const FAILED_FLUSH_STDOUT: &'static str = "Failed to flush stdout";
+
 #[derive(Debug)]
 pub enum WotError {
     NotFoundUserDir,
