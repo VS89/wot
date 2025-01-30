@@ -17,18 +17,6 @@ pub struct TestopsApiClient {
 }
 
 impl TestopsApiClient {
-    // Обновляем хедеры
-    // todo надо подумать как правильно сделать эту функцию
-    // fn update_headers(&self, headers: Option<HeaderMap>) -> HeaderMap {
-    //     match headers {
-    //         Some(mut value) => {
-    //             value.extend(&self.headers);
-    //             value
-    //         }
-    //         None => self.headers,
-    //     }
-    // }
-
     /// Создание API клиента
     pub fn new(config: &Config) -> Self {
         let mut auth_header = HeaderMap::new();
@@ -52,7 +40,6 @@ impl TestopsApiClient {
         endpoint: String,
         headers: Option<HeaderMap>,
     ) -> Result<String, Box<dyn Error>> {
-        // todo надо подумать как вынести это в отдельную функцию
         let all_headers = match headers {
             Some(mut value) => {
                 value.extend(self.headers);
@@ -73,7 +60,6 @@ impl TestopsApiClient {
             .await?)
     }
 
-    // todo по хорошему наверно это надо объеденить с обычным post методом
     /// POST запрос, в котором можно отправить file
     async fn post_with_file(
         self,
@@ -81,7 +67,6 @@ impl TestopsApiClient {
         multipart: multipart::Form,
         headers: Option<HeaderMap>,
     ) -> Result<String, Box<dyn Error>> {
-        // todo надо подумать как вынести это в отдельную функцию
         let all_headers = match headers {
             Some(mut value) => {
                 value.extend(self.headers);
@@ -160,7 +145,6 @@ impl TestopsApiClient {
             .map_err(|e| WotApiError::Multipart(file_name.to_string(), e.to_string()).into())
     }
 
-    // todo надо нормально допилить этот момент и разобраться как структуры записывать в файл, чтобы дебажить
     pub async fn get_launch_by_id(
         self,
         launch_id: u32,

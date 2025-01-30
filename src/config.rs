@@ -80,9 +80,6 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    // todo видимо в main нельзя хранить тесты они почему то не запускаются если их пачкой запускать
-    // или через cargo test
-
     #[test_case(String::from("http://instance.ru/api/rs"), String::from("http://instance.ru/api/rs"); "http")]
     #[test_case(String::from("https://example.com"), String::from("https://example.com"); "https")]
     #[test_case(String::from("https://instance.ru/"), String::from("https://instance.ru"); "last_char_slash")]
