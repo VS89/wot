@@ -1,30 +1,37 @@
-use std::env;
-use std::fs;
+use clap::Parser;
+use directories::UserDirs;
+use std::fs::File;
+use std::path::Path;
 use tokio;
-use wot::external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
-use wot::zip_directory;
-// https://github.com/clap-rs/clap?tab=readme-ov-file
-// https://docs.rs/clap/latest/clap/
+use wot::cli_app::{Cli, Commands};
+use wot::config::Config;
+use wot::constants::CONFIG_DIR;
+use wot::errors::WotError;
+use wot::send_report;
 
-// Рабочий пример кейса:
-// - Архивируем папку с результатами в .zip
-// - Загружаем отчет через апи в тестопс
-// - Получаем ссылку на лаунч
-// - Удаляем архив
 #[tokio::main]
-async fn main() {
-    let result = zip_directory("/Users/valentins/Desktop/test_allure_report").unwrap();
-    println!("{:?}", result);
-    let testops = TestopsApiClient::new(env::var("TESTOPS_BASE_API_URL").unwrap());
-    let launch_info = LaunchInfo::new("check work script", 2);
-    let response: ResponseLaunchUpload = testops
-        .post_archive_report_launch_upload(&result, launch_info)
-        .await
-        .unwrap();
-    let base_url_for_launch = env::var("TESTOPS_BASE_URL").unwrap();
-    println!(
-        "Ссылка на загруженный лаунч: {}/launch/{}",
-        base_url_for_launch, response.launch_id
-    );
-    let _ = fs::remove_file(&result);
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut config_path = Path::new("config.json");
+    if cfg!(debug_assertions) {
+        config_path = Path::new("test_config.json");
+    }
+    if let Some(user_dirs) = UserDirs::new() {
+        let path = user_dirs.home_dir().join(CONFIG_DIR).join(config_path);
+        if path.exists() {
+            let config = Config::get_config(path)?;
+            let cli = Cli::parse();
+
+            match &cli.command {
+                Commands::Report(value) => {
+                    send_report(&value.directory_path, value.project_id, &config).await?
+                }
+            }
+        } else {
+            let app = Config::new()?;
+            let file = File::create(path)?;
+            serde_json::to_writer_pretty(file, &app)
+                .expect(WotError::CantCreateConfig.to_string().as_str())
+        }
+    }
+    Ok(())
 }
