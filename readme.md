@@ -22,7 +22,7 @@ cargo --version
 4) Установите проект, выполнив команду:
 
 ```shell
-cargo install --git https://github.com/VS89/plugin_testops.git
+cargo install --git https://github.com/VS89/wot.git
 ```
 
 После установки в домашней директории `~/.config/wot/config.json` будет записан файл конфигурации.
