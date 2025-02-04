@@ -372,7 +372,7 @@ mod tests {
             "{}/test_files/file.json",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let exp_err = "Нужен файл с расширением .zip, был передан файл: *.json".to_string();
+        let exp_err = "Need a file with a .zip extension, a file was transferred: *.json";
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
             .unwrap_err()
@@ -396,9 +396,9 @@ mod tests {
     /// Проверяем, что функция get_part_zip_archive обрабатывает ошибку, если передается директория
     fn test_get_part_zip_archive_for_dir() {
         let file_path = PathBuf::from(format!("{}/test_files/", env!("CARGO_MANIFEST_DIR")));
-        let exp_err = "Не смогли прочитать файл по пути: \
-            \"/Users/valentins/Desktop/rust_projects/plugin_testops/test_files/\". \
-            Получили ошибку: Is a directory (os error 21)"
+        let exp_err = "Couldn't read the file in the path: \
+            \"/Users/valentins/Desktop/rust_projects/wot/test_files/\". \
+            We got an error: Is a directory (os error 21)"
             .to_string();
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)
@@ -411,8 +411,8 @@ mod tests {
     /// Проверяем, что функция get_part_zip_archive отрабатывает для пустого файла .zip
     fn test_get_part_zip_archive_empty_path() {
         let file_path = PathBuf::from("");
-        let exp_err = "Не смогли прочитать файл по пути: \"\". \
-            Получили ошибку: No such file or directory (os error 2)"
+        let exp_err = "Couldn't read the file in the path: \"\". \
+            We got an error: No such file or directory (os error 2)"
             .to_string();
         let act_err = testops_api_client()
             .get_part_zip_archive(&file_path)

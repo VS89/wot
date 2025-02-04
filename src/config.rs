@@ -93,7 +93,7 @@ mod tests {
     fn test_invalid_url(url: String) {
         let res = validate_url(url).unwrap_err().to_string();
         assert_eq!(
-            res, "Введенная строка должна быть URL",
+            res, "The string entered must be a URL",
             "Ожидали что URL НЕ пройдет валидацию и мы получим сообщение об ошибке"
         );
     }
@@ -113,7 +113,7 @@ mod tests {
     #[test_case("c4e42f15-5b22-6ae-b2-10b5e2ffcb14"; "invalid uuid token")]
     fn test_testops_validate_api_token_invalid(value: &str) {
         let res = validate_testops_api_token(&value).unwrap_err().to_string();
-        assert_eq!(res, "Ваш токен не прошел валидацию, попробуйте еще раз",
+        assert_eq!(res, "Your token failed validation, please try again",
             "Ожидали что api token: '{value}' НЕ пройдет валидацию и мы получим сообщение об ошибке");
     }
 
@@ -124,6 +124,6 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         ));
         let error = Config::get_config(path).unwrap_err();
-        assert_eq!("Не смогли распарсить конфиг", error.to_string());
+        assert_eq!("Couldn't parse the config", error.to_string());
     }
 }

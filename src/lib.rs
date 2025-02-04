@@ -254,7 +254,7 @@ mod tests {
     #[test]
     /// Проверяем архивацию несуществующей директории
     fn test_nonexistent() {
-        let expected_error = "Не нашли директорию по пути: <nonexistent_dir_for_test>".to_string();
+        let expected_error = "Could not find the directory at path: <nonexistent_dir_for_test>";
         let actual_error = zip_directory("nonexistent_dir_for_test");
         assert_eq!(
             expected_error,

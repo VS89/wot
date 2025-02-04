@@ -50,7 +50,7 @@ impl fmt::Display for WotError {
             ),
             WotError::ExtensionZip(extension_file) => write!(
                 f,
-                "Need a file with a .zip extension, a file was transferred:*.{extension_file}"
+                "Need a file with a .zip extension, a file was transferred: *.{extension_file}"
             ),
             WotError::NotFileName(file_path) => {
                 write!(
