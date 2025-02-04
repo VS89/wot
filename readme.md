@@ -25,7 +25,6 @@ cargo --version
 cargo install --git https://github.com/VS89/wot.git
 ```
 
-После установки в домашней директории `~/.config/wot/config.json` будет записан файл конфигурации.
 
 ### Использование
 
@@ -39,6 +38,9 @@ wot
 Для корректной работы приложения вам необходимо будет добавить API ключ от TestOps
 ([как его создать](https://qatools.ru/docs/overview/user-menu/)) и
 endpoint развернутного Allure TestOps.
+
+После завершения инструкций в домашней директории `~/.config/wot/config.json` будет записан файл конфигурации.
+
 
 Пример загрузки локального отчета в TestOps:
 
@@ -58,6 +60,11 @@ You want to load a report into a project: '<project_name>' [y/n]? y
 Link to downloaded lunch: <allure_testops_endpoint>/launch/1111
 ```
 
+Остальные команды можно посмотреть в справке
+
+```shell
+wot --help
+```
 
 ### ToDo
 

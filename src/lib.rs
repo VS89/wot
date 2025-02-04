@@ -43,7 +43,7 @@ pub async fn send_report(
         Ok(value) => value,
         Err(e) => {
             let _ = fs::remove_file(&result);
-            return Err(e.into());
+            return Err(e);
         }
     };
     println!(
@@ -70,7 +70,7 @@ fn get_dir_archive() -> Result<PathBuf, WotError> {
         );
         Ok(user_dirs.home_dir().join(CONFIG_DIR).join(archive_name))
     } else {
-        return Err(WotError::NotFoundUserDir);
+        Err(WotError::NotFoundUserDir)
     }
 }
 
@@ -146,7 +146,7 @@ pub fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, Box<dyn Error>
                         Some(file_name) => file_name.to_string(),
                         None => return Err(WotError::ParseFileNameToStr.into()),
                     };
-                    zip.start_file(format!("{}", file_name_archive).to_string(), options)?;
+                    zip.start_file(file_name_archive.to_string(), options)?;
                     zip.write_all(&buffer)?;
                 }
             }

@@ -1,5 +1,5 @@
 use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
-use crate::errors::WotError;
+use crate::errors::{WotError, COULD_READ_LINE};
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
@@ -53,7 +53,7 @@ fn validate_url(mut value: String) -> Result<String, WotError> {
     if !regex.is_match(&value) {
         return Err(WotError::InvalidURL);
     }
-    if value.chars().last().unwrap() == '/' {
+    if value.ends_with('/') {
         value.pop();
     }
     Ok(value)
@@ -61,7 +61,7 @@ fn validate_url(mut value: String) -> Result<String, WotError> {
 
 /// Валидация параметра testops_api_token
 fn validate_testops_api_token(value: &str) -> Result<bool, WotError> {
-    if !Uuid::parse_str(value).is_ok() {
+    if Uuid::parse_str(value).is_err() {
         return Err(WotError::InvalidToken);
     }
     Ok(true)
@@ -71,7 +71,7 @@ fn get_data_from_user_input() -> String {
     let mut input_value = String::new();
     io::stdin()
         .read_line(&mut input_value)
-        .expect(WotError::CouldReadLine.to_string().as_str());
+        .expect(COULD_READ_LINE);
     input_value.trim().to_string()
 }
 

@@ -2,11 +2,10 @@ use clap::Parser;
 use directories::UserDirs;
 use std::fs::File;
 use std::path::Path;
-use tokio;
 use wot::cli_app::{Cli, Commands};
 use wot::config::Config;
 use wot::constants::CONFIG_DIR;
-use wot::errors::WotError;
+use wot::errors::CANT_CREATE_CONFIG;
 use wot::send_report;
 
 #[tokio::main]
@@ -28,9 +27,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         } else {
             let app = Config::new()?;
+            if let Some(parent_dir) = path.parent() {
+                std::fs::create_dir_all(parent_dir)?;
+            }
             let file = File::create(path)?;
-            serde_json::to_writer_pretty(file, &app)
-                .expect(WotError::CantCreateConfig.to_string().as_str())
+            serde_json::to_writer_pretty(file, &app).expect(CANT_CREATE_CONFIG)
         }
     }
     Ok(())

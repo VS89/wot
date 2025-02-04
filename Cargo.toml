@@ -1,6 +1,6 @@
 [package]
 name = "wot"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Valentin Semenov <spbvalek@gmail.com>"]
 description = "Plugin for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops"
