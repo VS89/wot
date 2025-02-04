@@ -1,7 +1,10 @@
 use std::fmt;
 
-pub const FAILED_WRITE_STDOUT: &'static str = "Failed to write to stdout";
-pub const FAILED_FLUSH_STDOUT: &'static str = "Failed to flush stdout";
+pub const FAILED_WRITE_STDOUT: &str = "Failed to write to stdout";
+pub const FAILED_FLUSH_STDOUT: &str = "Failed to flush stdout";
+pub const PARSE_HEADER_VALUE: &str = "Could not convert HeaderValue";
+pub const COULD_READ_LINE: &str = "Couldn't read the line";
+pub const CANT_CREATE_CONFIG: &str = "Couldn't create a config";
 
 #[derive(Debug)]
 pub enum WotError {
@@ -14,12 +17,9 @@ pub enum WotError {
     NotParseConfig,
     NotFoundDirByPath(String),
     ParseFileNameToStr,
-    ParseHeaderValue,
     NotReadFile(String, String),
     ExtensionZip(String),
     NotFileName(String),
-    CouldReadLine,
-    CantCreateConfig,
 }
 // Не смогли прочитать файл по пути: {:?}. Получили ошибку: {:?}
 impl fmt::Display for WotError {
@@ -44,7 +44,6 @@ impl fmt::Display for WotError {
                 write!(f, "Could not find the directory at path: <{file_path}>")
             }
             WotError::ParseFileNameToStr => write!(f, "Could not cast the filename to a string"),
-            WotError::ParseHeaderValue => write!(f, "Could not convert HeaderValue"),
             WotError::NotReadFile(path, error) => write!(
                 f,
                 "Couldn't read the file in the path: \"{path}\". We got an error: {error}",
@@ -61,12 +60,6 @@ impl fmt::Display for WotError {
             }
             WotError::ProjectIdMoreThenZero => {
                 write!(f, "project_id must be an integer > 0")
-            }
-            WotError::CouldReadLine => {
-                write!(f, "Couldn't read the line")
-            }
-            WotError::CantCreateConfig => {
-                write!(f, "Couldn't create a config")
             }
         }
     }

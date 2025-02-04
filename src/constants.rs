@@ -1,7 +1,7 @@
-pub const CONFIG_DIR: &'static str = ".config/wot";
-pub const ENTER_INSTANCE_URL_TESTOPS: &'static str = "Enter the url of the testops instance: ";
-pub const ENTER_TESTOPS_API_KEY: &'static str = "Enter the TestOps API key: ";
-pub const COMPLETE_SETUP: &'static str = "To view the available commands, type: wot --help";
+pub const CONFIG_DIR: &str = ".config/wot";
+pub const ENTER_INSTANCE_URL_TESTOPS: &str = "Enter the url of the testops instance: ";
+pub const ENTER_TESTOPS_API_KEY: &str = "Enter the TestOps API key: ";
+pub const COMPLETE_SETUP: &str = "To view the available commands, type: wot --help";
 
 /// Standard message
 #[derive(Debug)]

@@ -1,4 +1,4 @@
-use crate::errors::{WotApiError, WotError};
+use crate::errors::{WotApiError, WotError, PARSE_HEADER_VALUE};
 use crate::Config;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
@@ -23,7 +23,7 @@ impl TestopsApiClient {
         auth_header.insert(
             "Authorization",
             HeaderValue::from_str(format!("Api-Token {}", config.testops_api_token).as_str())
-                .expect(&WotError::ParseHeaderValue.to_string()),
+                .expect(PARSE_HEADER_VALUE),
         );
         Self {
             headers: auth_header,
@@ -90,6 +90,7 @@ impl TestopsApiClient {
 
     /// post метод
     /// в url_method идет все, что после base_url и начинается с /
+    #[allow(dead_code)]
     async fn post(
         self,
         endpoint: String,
@@ -117,7 +118,7 @@ impl TestopsApiClient {
         full_file_path_to_archive: &PathBuf,
     ) -> Result<multipart::Part, Box<dyn Error>> {
         // Читаем массив байтов
-        let file_to_bytes = std::fs::read(&full_file_path_to_archive).map_err(|e| {
+        let file_to_bytes = std::fs::read(full_file_path_to_archive).map_err(|e| {
             WotError::NotReadFile(
                 full_file_path_to_archive.to_str().unwrap().to_string(),
                 e.to_string(),
