@@ -20,8 +20,10 @@ pub enum WotError {
     NotReadFile(String, String),
     ExtensionZip(String),
     NotFileName(String),
+    CouldNotCreateFile,
+    CouldNotFindTestCaseById(String),
 }
-// Не смогли прочитать файл по пути: {:?}. Получили ошибку: {:?}
+
 impl fmt::Display for WotError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -60,6 +62,12 @@ impl fmt::Display for WotError {
             }
             WotError::ProjectIdMoreThenZero => {
                 write!(f, "project_id must be an integer > 0")
+            }
+            WotError::CouldNotCreateFile => {
+                write!(f, "Could not create the file")
+            }
+            WotError::CouldNotFindTestCaseById(test_case_id) => {
+                write!(f, "Couldn't find a test case with ID == {test_case_id}")
             }
         }
     }

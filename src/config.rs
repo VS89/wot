@@ -18,7 +18,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Создаем конфиг приложения
+    /// Created app config
     pub fn new() -> Result<Self, Box<dyn Error>> {
         println!("{}", ENTER_INSTANCE_URL_TESTOPS);
         let testops_base_url = validate_url(get_data_from_user_input())?;
@@ -34,10 +34,7 @@ impl Config {
         })
     }
 
-    /// Получаем данные из конфига приложения
-    ///
-    /// Параметры:
-    /// - path_to_config: путь до конифга приложения
+    /// Get data from app config
     pub fn get_config(path_to_config: PathBuf) -> Result<Self, Box<dyn Error>> {
         let file = File::open(path_to_config)?;
         match serde_json::from_reader(file) {
@@ -47,7 +44,6 @@ impl Config {
     }
 }
 
-/// Введенная строка должна быть URL
 fn validate_url(mut value: String) -> Result<String, WotError> {
     let regex = Regex::new(r"^https?://.+$").unwrap();
     if !regex.is_match(&value) {
@@ -59,7 +55,6 @@ fn validate_url(mut value: String) -> Result<String, WotError> {
     Ok(value)
 }
 
-/// Валидация параметра testops_api_token
 fn validate_testops_api_token(value: &str) -> Result<bool, WotError> {
     if Uuid::parse_str(value).is_err() {
         return Err(WotError::InvalidToken);

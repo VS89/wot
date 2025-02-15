@@ -1,5 +1,6 @@
 use crate::errors::{WotApiError, WotError, PARSE_HEADER_VALUE};
 use crate::Config;
+use crate::create_file_in_current_directory;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
@@ -8,7 +9,7 @@ use std::error::Error;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
-/// Асинхронный API клиент для TestOps
+/// TestOps Async API client
 pub struct TestopsApiClient {
     headers: HeaderMap,
     pub base_url: String,
@@ -17,7 +18,7 @@ pub struct TestopsApiClient {
 }
 
 impl TestopsApiClient {
-    /// Создание API клиента
+    /// Created API client
     pub fn new(config: &Config) -> Self {
         let mut auth_header = HeaderMap::new();
         auth_header.insert(
@@ -33,8 +34,7 @@ impl TestopsApiClient {
         }
     }
 
-    /// get метод
-    /// в url_method идет все, что после base_url и начинается с /
+    /// GET method
     async fn get(
         self,
         endpoint: String,
@@ -60,7 +60,7 @@ impl TestopsApiClient {
             .await?)
     }
 
-    /// POST запрос, в котором можно отправить file
+    /// POST method for work with file
     async fn post_with_file(
         self,
         endpoint: String,
@@ -88,8 +88,7 @@ impl TestopsApiClient {
             .await?)
     }
 
-    /// post метод
-    /// в url_method идет все, что после base_url и начинается с /
+    /// POST method
     #[allow(dead_code)]
     async fn post(
         self,
@@ -112,7 +111,7 @@ impl TestopsApiClient {
             .await?)
     }
 
-    /// Получаем Part .zip архива для передачи в multipart::Form
+    /// Get multipart Part .zip archive
     fn get_part_zip_archive(
         &self,
         full_file_path_to_archive: &PathBuf,
@@ -164,12 +163,12 @@ impl TestopsApiClient {
         }
     }
 
-    /// Загрузка архива с отчетом в лаунч TestOps
+    /// Upload zip archiver report to launch TestOps
     ///
-    /// Параметры:
+    /// Param:
     ///
-    /// full_file_path_to_archive: полный путь до архива с результатами тестов
-    /// launch_info: структура LaunchInfo { name, project_id }
+    /// full_file_path_to_archive: full path to archive file with test results
+    /// launch_info: struct LaunchInfo { name, project_id }
     pub async fn post_archive_report_launch_upload(
         self,
         full_file_path_to_archive: &PathBuf,
@@ -200,7 +199,7 @@ impl TestopsApiClient {
         }
     }
 
-    /// Получение списка всех проектов
+    /// Get all project_ids
     pub async fn get_all_project_ids(self) -> Result<HashSet<u32>, Box<dyn Error>> {
         let mut current_page: u32 = 0;
         let limit_pages: u32 = 50;
@@ -239,7 +238,7 @@ impl TestopsApiClient {
         Ok(project_ids)
     }
 
-    /// Получение информации о проекте по его ID
+    /// Get project info by project_id
     pub async fn get_project_info_by_id(
         self,
         project_id: &u32,
@@ -253,6 +252,27 @@ impl TestopsApiClient {
             Err(e) => {
                 Err(WotApiError::ParsingResponse("/project/<id>".to_string(), e.to_string()).into())
             }
+        }
+    }
+
+    /// Get testcasse overview by testcase_id
+    pub async fn get_test_case_overview_by_id(
+        self,
+        test_case_id: u32,
+    ) -> Result<TestCaseOverview, Box<dyn Error>> {
+        let response = self
+            .get(format!("/testcase/{}/overview", test_case_id), None)
+            .await?;
+        if response.is_empty() {
+            return Err(WotApiError::EmptyResponse("/testcase/<id>/overview".to_string()).into());
+        }
+        match serde_json::from_str::<TestCaseOverview>(&response) {
+            Ok(value) => Ok(value),
+            Err(e) => Err(WotApiError::ParsingResponse(
+                "/testcase/<id>/overview".to_string(),
+                e.to_string(),
+            )
+            .into()),
         }
     }
 }
@@ -270,9 +290,8 @@ pub struct ResponseGetAllProject {
     pub total_pages: u32,
     pub content: Vec<ProjectInfo>,
 }
-// https://serde.rs/enum-representations.html брал пример отсюда
+
 #[derive(Deserialize, Serialize, Debug)]
-// чтобы преобразовать camelCase в snake_case
 #[serde(rename_all = "camelCase")]
 pub struct GetLauncByIdResponce {
     id: u32,
@@ -306,6 +325,139 @@ pub struct ResponseLaunchUpload {
     files_count: u32,
 }
 
+enum AllureMetaData {
+    Epic,
+    Feature,
+    Story,
+    Suite,
+    Unknown,
+}
+
+impl From<String> for AllureMetaData {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "Feature" => AllureMetaData::Feature,
+            "Epic" => AllureMetaData::Epic,
+            "Story" => AllureMetaData::Story,
+            "Suite" => AllureMetaData::Suite,
+            _ => AllureMetaData::Unknown,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCaseOverview {
+    id: u32,
+    project_id: u32,
+    name: String,
+    description: String,
+    precondition: Option<String>,
+    expected_result: Option<String>,
+    custom_fields: Option<Vec<CustomFieldInfo>>,
+    tags: Option<Vec<Tag>>,
+}
+
+impl TestCaseOverview {
+    /// Convert allure metadata
+    fn convert_allure_metadata_to_python_template(&self) -> String {
+        let mut vec_string: Vec<String> = vec![];
+        let custom_fields: Vec<CustomFieldInfo> = match self.custom_fields.clone() {
+            Some(value) => value,
+            None => return String::from(""),
+        };
+        for i in custom_fields {
+            let meta_data_type = AllureMetaData::from(i.custom_field.name.clone());
+            match meta_data_type {
+                AllureMetaData::Epic => vec_string.push(format!("@allure.epic('{}')", i.name)),
+                AllureMetaData::Feature => {
+                    vec_string.push(format!("@allure.feature('{}')", i.name))
+                }
+                AllureMetaData::Story => vec_string.push(format!("@allure.story('{}')", i.name)),
+                AllureMetaData::Suite => vec_string.push(format!("@allure.suite('{}')", i.name)),
+                _ => {
+                    vec_string.push(format!("@allure.label('{}', '{}')", i.custom_field.name.to_lowercase(), i.name));
+                },
+            }
+        }
+        let allure_tags: String = self.tags.as_ref().map_or_else(
+            || String::from(""),
+            |value| {
+                value.iter().map(|i| format!("'{}'", i.name)).collect::<Vec<String>>().join(", ")
+            });
+        vec_string.push(format!("@allure.tag({})", allure_tags));
+        vec_string.join("\n")
+    }
+
+    /// Collect docstring for testcase
+    fn concat_all_description(&self) -> String {
+        let mut all_description: Vec<String> = vec![];
+        all_description.push(self.description.clone());
+        if let Some(prediction) = self.precondition.clone() {
+            all_description.push(prediction);
+        }
+        if let Some(exp_res) = self.expected_result.clone() {
+            all_description.push(exp_res)
+        }
+        all_description.join("\n\n").replace("\n", "\n\t\t")
+    }
+
+    /// Parse testcase description to python template
+    pub fn create_test_case_python_template(&self, file_name: &str) -> Result<String, WotError> {
+        let template = format!(
+            "import pytest
+import allure
+
+
+{}
+@pytest.mark.TEMPLATE_MARK_NAME
+class Test1:
+
+    @allure.id('{}')
+    @allure.title('{}')
+    def test1(self):
+        \"\"\"
+        {}
+        \"\"\"
+        pass
+",
+            self.convert_allure_metadata_to_python_template(),
+            self.id,
+            self.name,
+            self.concat_all_description(),
+        );
+        create_file_in_current_directory(file_name, template.as_bytes())
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomFieldInfo {
+    id: u32,
+    name: String,
+    custom_field: CustomField,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomField {
+    name: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Step {
+    name: String,
+    steps: Vec<Self>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Tag {
+    id: u32,
+    name: String
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -317,6 +469,15 @@ mod tests {
             testops_api_token: env::var("TESTOPS_API_TOKEN").unwrap(),
         };
         TestopsApiClient::new(&config)
+    }
+
+    #[tokio::test]
+    async fn test_get_test_case_overview() {
+        let resp = testops_api_client()
+            .get_test_case_overview_by_id(23292)
+            .await
+            .unwrap();
+        let _ = resp.create_test_case_python_template("test_template.py");
     }
 
     #[tokio::test]

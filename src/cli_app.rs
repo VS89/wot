@@ -5,7 +5,7 @@ use crate::errors::WotError;
 #[derive(Parser)]
 #[command(
     name = "wot",
-    version = "0.1.0",
+    version = "0.2.1",
     author = "Valentin Semenov <valentin@semenov-aqa.ru>",
     about = "CLI application for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops",
     long_about = None,
@@ -20,6 +20,8 @@ pub struct Cli {
 pub enum Commands {
     /// Uploading a report to TestOps
     Report(ReportArgs),
+    /// Action with testcase
+    Testcase(TestcaseArgs),
 }
 
 #[derive(Args)]
@@ -28,14 +30,18 @@ pub struct ReportArgs {
     #[arg(long, short, required = true)]
     pub directory_path: String,
     /// Allure project id
-    #[arg(long, short, required = true, value_parser = validate_project_id)]
+    #[arg(long, short, required = true, value_parser = validate_u32_more_then_zero)]
     pub project_id: u32,
 }
 
-// Валидация параметра project_id. В целом простую валидацю параметра описывать не обязательно,
-// ее отлично выполняет clap
-// Надо бы еще прикрутить, чтобы тут брались id проектов из тестопса и показывало какие данные можно вводить
-fn validate_project_id(value: &str) -> Result<u32, WotError> {
+#[derive(Args)]
+pub struct TestcaseArgs {
+    /// Import testcase
+    #[arg(long, short, value_parser = validate_u32_more_then_zero)]
+    pub import_testcase_id: u32,
+}
+
+fn validate_u32_more_then_zero(value: &str) -> Result<u32, WotError> {
     let project_id: u32 = value.parse().map_err(|_| WotError::ProjectIdMoreThenZero)?;
     Ok(project_id)
 }

@@ -3,10 +3,11 @@ use directories::UserDirs;
 use std::fs::File;
 use std::path::Path;
 use wot::cli_app::{Cli, Commands};
+use wot::command_logic::report::send_report;
+use wot::command_logic::testcase::import_testcase_by_id;
 use wot::config::Config;
 use wot::constants::CONFIG_DIR;
 use wot::errors::CANT_CREATE_CONFIG;
-use wot::send_report;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -23,6 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match &cli.command {
                 Commands::Report(value) => {
                     send_report(&value.directory_path, value.project_id, &config).await?
+                }
+                Commands::Testcase(value) => {
+                    import_testcase_by_id(value.import_testcase_id, &config).await?
                 }
             }
         } else {
