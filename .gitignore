@@ -3,3 +3,5 @@
 Cargo.lock
 log*
 /test_files
+.DS_Store
+*.py

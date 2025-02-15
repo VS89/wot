@@ -1,15 +1,16 @@
 pub mod cli_app;
+pub mod command_logic;
 pub mod config;
 pub mod constants;
 pub mod errors;
 pub mod external_api;
 
 use config::Config;
-use constants::{Message, CONFIG_DIR};
+use constants::CONFIG_DIR;
 use directories::UserDirs;
-use errors::{WotError, FAILED_FLUSH_STDOUT, FAILED_WRITE_STDOUT};
+use errors::WotError;
 
-use external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
+use external_api::testops::TestopsApiClient;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs::{self, read_dir, File};
@@ -17,46 +18,6 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
-
-/// Sending report to TestOps
-pub async fn send_report(
-    path_to_report_directory: &str,
-    project_id: u32,
-    config: &Config,
-) -> Result<(), Box<dyn std::error::Error>> {
-    validate_project_id(&project_id, config).await?;
-    let confirm_flag = confirm_upload_to_project(&project_id, config).await?;
-    if !confirm_flag {
-        return Ok(());
-    }
-    let result = zip_directory(path_to_report_directory)?;
-    let testops = TestopsApiClient::new(config);
-    let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
-    let launch_info = LaunchInfo::new(
-        &Message::LaunchRunFrom(generate_launch_name).to_formatted_string(),
-        project_id,
-    );
-    let response: ResponseLaunchUpload = match testops
-        .post_archive_report_launch_upload(&result, launch_info)
-        .await
-    {
-        Ok(value) => value,
-        Err(e) => {
-            let _ = fs::remove_file(&result);
-            return Err(e);
-        }
-    };
-    println!(
-        "{}",
-        Message::LaunchLinkDownloaded(
-            config.testops_base_url.clone(),
-            response.launch_id.to_string()
-        )
-        .to_formatted_string()
-    );
-    let _ = fs::remove_file(&result);
-    Ok(())
-}
 
 /// Get path directory with report tests
 fn get_dir_archive() -> Result<PathBuf, WotError> {
@@ -84,35 +45,6 @@ async fn validate_project_id(
     match set_project_ids.contains(project_id) {
         true => Ok(true),
         false => Err(WotError::ProjectIdNotFound(*project_id).into()),
-    }
-}
-
-/// Confirm upload to project
-async fn confirm_upload_to_project(
-    project_id: &u32,
-    config: &Config,
-) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config);
-    let project_info = testops.get_project_info_by_id(project_id).await?;
-
-    let mut stdout = std::io::stdout();
-    stdout
-        .write_all(
-            Message::ApproveUploadReport(project_info.name)
-                .to_formatted_string()
-                .as_bytes(),
-        )
-        .expect(FAILED_WRITE_STDOUT);
-    stdout.flush().expect(FAILED_FLUSH_STDOUT);
-
-    let mut confirmantion = String::new();
-    std::io::stdin().read_line(&mut confirmantion)?;
-
-    let trim_lowercase_confirmation = confirmantion.trim().to_lowercase();
-    if trim_lowercase_confirmation == "y" || trim_lowercase_confirmation == "yes" {
-        Ok(true)
-    } else {
-        Ok(false)
     }
 }
 
@@ -156,6 +88,23 @@ pub fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, Box<dyn Error>
     // Завершаем запись архива
     zip.finish()?;
     Ok(dir_archive)
+}
+
+/// Create file in current directory
+///
+/// Return full path to created file
+fn create_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, WotError> {
+    let mut file = match File::create(file_name) {
+        Ok(value) => value,
+        Err(_) => return Err(WotError::CouldNotCreateFile),
+    };
+    let _ = file.write_all(content);
+    let mut path = match std::env::current_dir() {
+        Ok(value) => value,
+        Err(_) => return Err(WotError::CouldNotCreateFile)
+    };
+    path.push(file_name);
+    Ok(path.display().to_string())
 }
 
 #[cfg(test)]
