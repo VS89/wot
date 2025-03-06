@@ -351,7 +351,7 @@ pub struct TestCaseOverview {
     id: u32,
     project_id: u32,
     name: String,
-    description: String,
+    description: Option<String>,
     precondition: Option<String>,
     expected_result: Option<String>,
     custom_fields: Option<Vec<CustomFieldInfo>>,
@@ -392,7 +392,9 @@ impl TestCaseOverview {
     /// Collect docstring for testcase
     fn concat_all_description(&self) -> String {
         let mut all_description: Vec<String> = vec![];
-        all_description.push(self.description.clone());
+        if let Some(description) = self.description.clone() {
+            all_description.push(description)
+        }
         if let Some(prediction) = self.precondition.clone() {
             all_description.push(prediction);
         }
@@ -474,7 +476,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_test_case_overview() {
         let resp = testops_api_client()
-            .get_test_case_overview_by_id(23292)
+            .get_test_case_overview_by_id(24045)
             .await
             .unwrap();
         let _ = resp.create_test_case_python_template("test_template.py");
