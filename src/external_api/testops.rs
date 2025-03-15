@@ -4,7 +4,7 @@ use crate::create_file_in_current_directory;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::path::PathBuf;
 
@@ -275,6 +275,21 @@ impl TestopsApiClient {
             .into()),
         }
     }
+
+    pub async fn get_testcase_scenario(self, test_case_id: u32) -> Result<Scenario, Box<dyn Error>> {
+        let response = self.get(format!("/testcase/{}/step", test_case_id), None).await?;
+        if response.is_empty() {
+            return Err(WotApiError::EmptyResponse("/testcase/<id>/step".to_string()).into());
+        }
+        match serde_json::from_str::<Scenario>(&response) {
+            Ok(value) => Ok(value),
+            Err(e) => Err(WotApiError::ParsingResponse(
+                "/testcase/<id>/step".to_string(),
+                e.to_string(),
+            )
+            .into()),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -404,32 +419,6 @@ impl TestCaseOverview {
         all_description.join("\n\n").replace("\n", "\n\t\t")
     }
 
-    /// Parse testcase description to python template
-    pub fn create_test_case_python_template(&self, file_name: &str) -> Result<String, WotError> {
-        let template = format!(
-            "import pytest
-import allure
-
-
-{}
-@pytest.mark.TEMPLATE_MARK_NAME
-class Test1:
-
-    @allure.id('{}')
-    @allure.title('{}')
-    def test1(self):
-        \"\"\"
-        {}
-        \"\"\"
-        pass
-",
-            self.convert_allure_metadata_to_python_template(),
-            self.id,
-            self.name,
-            self.concat_all_description(),
-        );
-        create_file_in_current_directory(file_name, template.as_bytes())
-    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -460,26 +449,103 @@ pub struct Tag {
     name: String
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Scenario {
+    root: Root,
+    pub scenario_steps: HashMap<String, ScenarioStep>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Root {
+    children: Vec<u64>
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioStep {
+    id: u64,
+    body: String,
+    #[serde(default)]
+    expected_result_id: Option<u64>,
+    #[serde(default)]
+    children: Option<Vec<u64>>,
+}
+
+impl Scenario {
+    fn get_scenario(&self) -> String {
+        let mut step_strings: Vec<String> = vec![];
+        for &id in &self.root.children {
+            let step_key = id.to_string();
+            if let Some(step) = self.scenario_steps.get(&step_key) {
+                step_strings.push(step.body.clone());
+                step.expected_result_id
+                    .and_then(|eid| self.scenario_steps.get(&eid.to_string()))
+                    .filter(|estep| estep.body == "Expected Result")
+                    .and_then(|estep| estep.children.as_ref())
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|&cid| self.scenario_steps.get(&cid.to_string()))
+                    .map(|child_step| format!("\t{}", child_step.body))
+                    .for_each(|step| step_strings.push(step));
+            }
+        }
+        step_strings.join("\n\t\t\t")
+    }
+}
+
+pub fn create_template_python_ati_su(test_case_overview: TestCaseOverview,
+    test_case_scenario: Scenario, file_name: &str) -> Result<String, WotError>{
+    let allure_metadata = test_case_overview.convert_allure_metadata_to_python_template();
+    let all_description = test_case_overview.concat_all_description();
+    let scenario = test_case_scenario.get_scenario();
+    let template = format!(
+        "import pytest
+import allure
+
+
+{}
+@pytest.mark.TEMPLATE_MARK_NAME
+class Test1:
+
+    @allure.id('{}')
+    @allure.title('{}')
+    def test1(self):
+        \"\"\"
+        {}
+
+        {}
+
+        Шаги:
+            {}
+        \"\"\"
+        pass
+",
+        allure_metadata,
+        test_case_overview.id,
+        test_case_overview.name,
+        test_case_overview.name,
+        all_description,
+        scenario,
+    );
+    create_file_in_current_directory(file_name, template.as_bytes())
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use std::env;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     fn testops_api_client() -> TestopsApiClient {
         let config = Config {
             testops_base_url: env::var("TESTOPS_BASE_URL").unwrap(),
             testops_api_token: env::var("TESTOPS_API_TOKEN").unwrap(),
         };
         TestopsApiClient::new(&config)
-    }
-
-    #[tokio::test]
-    async fn test_get_test_case_overview() {
-        let resp = testops_api_client()
-            .get_test_case_overview_by_id(24045)
-            .await
-            .unwrap();
-        let _ = resp.create_test_case_python_template("test_template.py");
     }
 
     #[tokio::test]
@@ -585,5 +651,50 @@ mod tests {
             act_err, exp_err,
             "Не получили ошибку, что не смогли прочитать файл"
         );
+    }
+    #[test]
+    fn test_scenario_parse() {
+        let data = fs::read_to_string(format!("{}/test_files/scenario_with_expected_result.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let scenario: Scenario = serde_json::from_str(&data).expect("Ошибка парсинга JSON из файла /test_files/scenario_with_expected_result.json");
+        let exp_str = "Подготовка к тесту
+\t\t\t\tПроверка после подготовки
+\t\t\tВторой шаг, что то дергаем
+\t\t\tЗавершаем тест
+\t\t\tДобавили еще один шаг
+\t\t\tПервый шаг, создаем юзера
+\t\t\t\tПроверяем 200 и user_id не пустой
+\t\t\t\tи что нибудь еще
+\t\t\t\tИ тут нужна еще одна проверка";
+        assert_eq!(scenario.get_scenario(), exp_str);
+    }
+
+    #[test]
+    fn test_empty_scenario_parse() {
+        let json_str = r#"
+        {
+            "root": {
+            "children": []
+            },
+            "scenarioSteps": {},
+            "attachments": {},
+            "sharedSteps": {},
+            "sharedStepScenarioSteps": {},
+            "sharedStepAttachments": {}
+        }
+        "#;
+        let data: Scenario = serde_json::from_str(json_str).unwrap();
+        let exp_str = "";
+        assert_eq!(data.get_scenario(), exp_str);
+    }
+
+    #[test]
+    fn test_create_template_overview_and_scenario() {
+        let data_scenario = fs::read_to_string(format!("{}/test_files/scenario_with_expected_result.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let scenario: Scenario = serde_json::from_str(&data_scenario).expect("Ошибка парсинга JSON из файла /test_files/scenario_with_expected_result.json");
+        let data_overview = fs::read_to_string(format!("{}/test_files/test_case_overview_24442.json", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let overview: TestCaseOverview = serde_json::from_str(&data_overview).expect("Ошибка парсинга JSON из файла /test_files/test_case_overview_24442.json");
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let file_name = format!("test_{}_{}.py", timestamp, 24442);
+        let _ = create_template_python_ati_su(overview, scenario, &file_name);
     }
 }
