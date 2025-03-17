@@ -8,9 +8,7 @@ pub async fn import_testcase_by_id(
     test_case_id: u32,
     config: &Config,
 ) -> Result<(), WotError> {
-    // todo надо поправить работу с апи, чтобы так не гавнокодить
     let testops = TestopsApiClient::new(config);
-    let testops_clone = TestopsApiClient::new(config);
     let test_case_overview = match testops
         .get_test_case_overview_by_id(test_case_id)
         .await {
@@ -20,7 +18,7 @@ pub async fn import_testcase_by_id(
                 return Err(error_text);
             }
         };
-    let test_case_scenario = match testops_clone.get_testcase_scenario(test_case_id).await {
+    let test_case_scenario = match testops.get_testcase_scenario(test_case_id).await {
         Ok(value) => value,
         Err(_) => {
             let error_text = WotError::CouldNotFindTestCaseById(test_case_id.to_string());

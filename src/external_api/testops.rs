@@ -34,19 +34,23 @@ impl TestopsApiClient {
         }
     }
 
+    fn merge_headers(&self, headers: Option<HeaderMap>) -> HeaderMap {
+        match headers {
+            Some(mut value) => {
+                value.extend(self.headers.clone());
+                value
+            }
+            None => self.headers.clone()
+        }
+    }
+
     /// GET method
     async fn get(
-        self,
+        &self,
         endpoint: String,
         headers: Option<HeaderMap>,
     ) -> Result<String, Box<dyn Error>> {
-        let all_headers = match headers {
-            Some(mut value) => {
-                value.extend(self.headers);
-                value
-            }
-            None => self.headers,
-        };
+        let all_headers = self.merge_headers(headers);
         Ok(self
             .client
             .get(format!(
@@ -62,18 +66,12 @@ impl TestopsApiClient {
 
     /// POST method for work with file
     async fn post_with_file(
-        self,
+        &self,
         endpoint: String,
         multipart: multipart::Form,
         headers: Option<HeaderMap>,
     ) -> Result<String, Box<dyn Error>> {
-        let all_headers = match headers {
-            Some(mut value) => {
-                value.extend(self.headers);
-                value
-            }
-            None => self.headers,
-        };
+        let all_headers = self.merge_headers(headers);
         Ok(self
             .client
             .post(format!(
@@ -82,29 +80,6 @@ impl TestopsApiClient {
             ))
             .headers(all_headers)
             .multipart(multipart)
-            .send()
-            .await?
-            .text()
-            .await?)
-    }
-
-    /// POST method
-    #[allow(dead_code)]
-    async fn post(
-        self,
-        endpoint: String,
-        body: String,
-        mut headers: HeaderMap,
-    ) -> Result<String, Box<dyn Error>> {
-        headers.extend(self.headers);
-        Ok(self
-            .client
-            .post(format!(
-                "{}{}{}",
-                self.base_url, self.postfix_after_base_url, endpoint
-            ))
-            .headers(headers)
-            .body(body)
             .send()
             .await?
             .text()
@@ -146,7 +121,7 @@ impl TestopsApiClient {
     }
 
     pub async fn get_launch_by_id(
-        self,
+        &self,
         launch_id: u32,
     ) -> Result<GetLauncByIdResponce, Box<dyn Error>> {
         let response = self.get(format!("/launch/{}", launch_id), None).await?;
@@ -170,7 +145,7 @@ impl TestopsApiClient {
     /// full_file_path_to_archive: full path to archive file with test results
     /// launch_info: struct LaunchInfo { name, project_id }
     pub async fn post_archive_report_launch_upload(
-        self,
+        &self,
         full_file_path_to_archive: &PathBuf,
         launch_info: LaunchInfo,
     ) -> Result<ResponseLaunchUpload, Box<dyn Error>> {
@@ -200,7 +175,7 @@ impl TestopsApiClient {
     }
 
     /// Get all project_ids
-    pub async fn get_all_project_ids(self) -> Result<HashSet<u32>, Box<dyn Error>> {
+    pub async fn get_all_project_ids(&self) -> Result<HashSet<u32>, Box<dyn Error>> {
         let mut current_page: u32 = 0;
         let limit_pages: u32 = 50;
         let mut project_ids: HashSet<u32> = HashSet::new();
@@ -240,7 +215,7 @@ impl TestopsApiClient {
 
     /// Get project info by project_id
     pub async fn get_project_info_by_id(
-        self,
+        &self,
         project_id: &u32,
     ) -> Result<ProjectInfo, Box<dyn Error>> {
         let response = self.get(format!("/project/{}", project_id), None).await?;
@@ -257,7 +232,7 @@ impl TestopsApiClient {
 
     /// Get testcasse overview by testcase_id
     pub async fn get_test_case_overview_by_id(
-        self,
+        &self,
         test_case_id: u32,
     ) -> Result<TestCaseOverview, Box<dyn Error>> {
         let response = self
@@ -276,7 +251,7 @@ impl TestopsApiClient {
         }
     }
 
-    pub async fn get_testcase_scenario(self, test_case_id: u32) -> Result<Scenario, Box<dyn Error>> {
+    pub async fn get_testcase_scenario(&self, test_case_id: u32) -> Result<Scenario, Box<dyn Error>> {
         let response = self.get(format!("/testcase/{}/step", test_case_id), None).await?;
         if response.is_empty() {
             return Err(WotApiError::EmptyResponse("/testcase/<id>/step".to_string()).into());
