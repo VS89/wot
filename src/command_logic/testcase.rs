@@ -1,26 +1,33 @@
 use crate::config::Config;
 use crate::errors::WotError;
-use crate::external_api::testops::TestopsApiClient;
+use crate::external_api::testops::{TestopsApiClient, create_template_python_ati_su};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Import testcase by id from TestOps
 pub async fn import_testcase_by_id(
-    testcase_id: u32,
+    test_case_id: u32,
     config: &Config,
 ) -> Result<(), WotError> {
     let testops = TestopsApiClient::new(config);
-    let get_testcase_info = match testops
-        .get_test_case_overview_by_id(testcase_id)
+    let test_case_overview = match testops
+        .get_test_case_overview_by_id(test_case_id)
         .await {
             Ok(value) => value,
             Err(_) => {
-                let error_text = WotError::CouldNotFindTestCaseById(testcase_id.to_string());
+                let error_text = WotError::CouldNotFindTestCaseById(test_case_id.to_string());
                 return Err(error_text);
             }
         };
+    let test_case_scenario = match testops.get_testcase_scenario(test_case_id).await {
+        Ok(value) => value,
+        Err(_) => {
+            let error_text = WotError::CouldNotFindTestCaseById(test_case_id.to_string());
+            return Err(error_text);
+        }
+    };
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    let file_name = format!("test_{}_{}.py", timestamp, testcase_id);
-    let full_path_to_file = get_testcase_info.create_test_case_python_template(&file_name)?;
+    let file_name = format!("test_{}_{}.py", timestamp, test_case_id);
+    let full_path_to_file = create_template_python_ati_su(test_case_overview, test_case_scenario, &file_name)?;
     println!("File created: {}", full_path_to_file);
     Ok(())
 }
