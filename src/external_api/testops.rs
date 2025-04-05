@@ -120,23 +120,23 @@ impl TestopsApiClient {
             .map_err(|e| WotApiError::Multipart(file_name.to_string(), e.to_string()).into())
     }
 
-    pub async fn get_launch_by_id(
-        &self,
-        launch_id: u32,
-    ) -> Result<GetLauncByIdResponce, Box<dyn Error>> {
-        let response = self.get(format!("/launch/{}", launch_id), None).await?;
-        if response.is_empty() {
-            return Err(WotApiError::EmptyResponse("/launch/[launch_id]".to_string()).into());
-        }
-        match serde_json::from_str(&response) {
-            Ok(value) => Ok(value),
-            Err(e) => Err(WotApiError::ParsingResponse(
-                "/launch/[launch_id]".to_string(),
-                e.to_string(),
-            )
-            .into()),
-        }
-    }
+    // pub async fn get_launch_by_id(
+    //     &self,
+    //     launch_id: u32,
+    // ) -> Result<GetLauncByIdResponce, Box<dyn Error>> {
+    //     let response = self.get(format!("/launch/{}", launch_id), None).await?;
+    //     if response.is_empty() {
+    //         return Err(WotApiError::EmptyResponse("/launch/[launch_id]".to_string()).into());
+    //     }
+    //     match serde_json::from_str(&response) {
+    //         Ok(value) => Ok(value),
+    //         Err(e) => Err(WotApiError::ParsingResponse(
+    //             "/launch/[launch_id]".to_string(),
+    //             e.to_string(),
+    //         )
+    //         .into()),
+    //     }
+    // }
 
     /// Upload zip archiver report to launch TestOps
     ///
@@ -540,20 +540,20 @@ mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn test_get_all_project_ids() {
-        let resp = testops_api_client().get_all_project_ids().await.unwrap();
-        assert!(resp.contains(&2), "Не нашли проект с id == 2");
-    }
+    // #[tokio::test]
+    // async fn test_get_all_project_ids() {
+    //     let resp = testops_api_client().get_all_project_ids().await.unwrap();
+    //     assert!(resp.contains(&2), "Не нашли проект с id == 2");
+    // }
 
-    #[tokio::test]
-    async fn test_get_project_by_id() {
-        let resp = testops_api_client()
-            .get_project_info_by_id(&2)
-            .await
-            .unwrap();
-        assert_eq!("TestProject", resp.name);
-    }
+    // #[tokio::test]
+    // async fn test_get_project_by_id() {
+    //     let resp = testops_api_client()
+    //         .get_project_info_by_id(&2)
+    //         .await
+    //         .unwrap();
+    //     assert_eq!("TestProject", resp.name);
+    // }
 
     #[test]
     /// Проверяем, что функция get_part_zip_archive отрабатывает

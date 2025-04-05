@@ -4,6 +4,8 @@ use crate::errors::{FAILED_FLUSH_STDOUT, FAILED_WRITE_STDOUT};
 
 use crate::external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
 use crate::{validate_project_id, zip_directory};
+// use crate::external_api::testops_api::testops_api::TestopsApi;
+// use crate::external_api::testops_api::models::response_launch_upload::ResponseLaunchUpload;
 use std::error::Error;
 use std::fs;
 use std::io::Write;

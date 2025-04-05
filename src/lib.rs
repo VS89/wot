@@ -4,12 +4,14 @@ pub mod config;
 pub mod constants;
 pub mod errors;
 pub mod external_api;
+pub mod utils;
 
 use config::Config;
 use constants::CONFIG_DIR;
 use directories::UserDirs;
 use errors::WotError;
 
+use external_api::base_api_client::ApiError;
 use external_api::testops::TestopsApiClient;
 use std::collections::HashSet;
 use std::error::Error;
