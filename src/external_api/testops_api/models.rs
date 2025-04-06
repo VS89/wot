@@ -8,3 +8,4 @@ pub mod test_case_overview;
 pub mod custom_field;
 pub mod custom_field_info;
 pub mod tag;
+pub mod test_case_scenario;

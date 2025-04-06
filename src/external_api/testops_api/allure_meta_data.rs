@@ -31,8 +31,8 @@ impl AllureMetaData {
         Self::create_decorator("suite", value)
     }
 
-    pub fn label(value: &str) -> String {
-        Self::create_decorator("label", value)
+    pub fn label(field_name: &str, value: &str) -> String {
+        format!("@allure.label('{}', '{value}')", field_name.to_ascii_lowercase())
     }
 }
 
@@ -68,8 +68,8 @@ mod tests {
 
     #[test]
     fn test_label_creation() {
-        let decorator = AllureMetaData::label("Smoke");
-        assert_eq!(decorator, "@allure.label('Smoke')");
+        let decorator = AllureMetaData::label("Smoke", "ValueSmoke");
+        assert_eq!(decorator, "@allure.label('smoke', 'ValueSmoke')");
     }
 
     #[test]

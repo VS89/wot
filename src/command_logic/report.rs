@@ -1,12 +1,10 @@
-use crate::config::Config;
 use crate::constants::Message;
-use crate::errors::{FAILED_FLUSH_STDOUT, FAILED_WRITE_STDOUT};
 
-use crate::external_api::testops::{LaunchInfo, ResponseLaunchUpload, TestopsApiClient};
+use crate::external_api::base_api_client::ApiError;
 use crate::{validate_project_id, zip_directory};
-// use crate::external_api::testops_api::testops_api::TestopsApi;
-// use crate::external_api::testops_api::models::response_launch_upload::ResponseLaunchUpload;
-use std::error::Error;
+use crate::external_api::testops_api::testops_api::TestopsApi;
+use crate::external_api::testops_api::models::launch_info::LaunchInfo;
+use crate::external_api::testops_api::models::response_launch_upload::ResponseLaunchUpload;
 use std::fs;
 use std::io::Write;
 
@@ -14,34 +12,24 @@ use std::io::Write;
 pub async fn send_report(
     path_to_report_directory: &str,
     project_id: u32,
-    config: &Config,
-) -> Result<(), Box<dyn std::error::Error>> {
-    validate_project_id(&project_id, config).await?;
-    let confirm_flag = confirm_upload_to_project(&project_id, config).await?;
+    testops_api_client: &TestopsApi,
+) -> Result<(), ApiError> {
+    validate_project_id(project_id, testops_api_client).await?;
+    let confirm_flag = confirm_upload_to_project(project_id, testops_api_client).await?;
     if !confirm_flag {
         return Ok(());
     }
-    let result = zip_directory(path_to_report_directory)?;
-    let testops = TestopsApiClient::new(config);
+    let result = zip_directory(path_to_report_directory).await?;
     let generate_launch_name = chrono::Local::now().format("%d/%m/%Y %H:%M").to_string();
     let launch_info = LaunchInfo::new(
         &Message::LaunchRunFrom(generate_launch_name).to_formatted_string(),
         project_id,
     );
-    let response: ResponseLaunchUpload = match testops
-        .post_archive_report_launch_upload(&result, launch_info)
-        .await
-    {
-        Ok(value) => value,
-        Err(e) => {
-            let _ = fs::remove_file(&result);
-            return Err(e);
-        }
-    };
+    let response: ResponseLaunchUpload = testops_api_client.post_upload_report(&result, &launch_info).await?;
     println!(
         "{}",
         Message::LaunchLinkDownloaded(
-            config.testops_base_url.clone(),
+            testops_api_client.client.base_url.to_string(),
             response.launch_id.to_string()
         )
         .to_formatted_string()
@@ -52,11 +40,10 @@ pub async fn send_report(
 
 /// Confirm upload to project
 async fn confirm_upload_to_project(
-    project_id: &u32,
-    config: &Config,
-) -> Result<bool, Box<dyn Error>> {
-    let testops = TestopsApiClient::new(config);
-    let project_info = testops.get_project_info_by_id(project_id).await?;
+    project_id: u32,
+    testops_api_client: &TestopsApi,
+) -> Result<bool, ApiError> {
+    let project_info = testops_api_client.get_project_info_by_id(&project_id).await?;
 
     let mut stdout = std::io::stdout();
     stdout
@@ -64,17 +51,12 @@ async fn confirm_upload_to_project(
             Message::ApproveUploadReport(project_info.name)
                 .to_formatted_string()
                 .as_bytes(),
-        )
-        .expect(FAILED_WRITE_STDOUT);
-    stdout.flush().expect(FAILED_FLUSH_STDOUT);
+        )?;
+    stdout.flush()?;
 
-    let mut confirmantion = String::new();
-    std::io::stdin().read_line(&mut confirmantion)?;
+    let mut confirmation = String::new();
+    std::io::stdin().read_line(&mut confirmation)?;
 
-    let trim_lowercase_confirmation = confirmantion.trim().to_lowercase();
-    if trim_lowercase_confirmation == "y" || trim_lowercase_confirmation == "yes" {
-        Ok(true)
-    } else {
-        Ok(false)
-    }
+    let trimmed = confirmation.trim().to_lowercase();
+    Ok(matches!(trimmed.as_str(), "y" | "yes" | ""))
 }

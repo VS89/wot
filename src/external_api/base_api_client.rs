@@ -1,4 +1,4 @@
-use reqwest::{header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE}, multipart::{self, Form, Part}, Client, StatusCode, Url};
+use reqwest::{header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE}, multipart, Client, StatusCode, Url};
 use thiserror::Error;
 
 const APPLICATION_JSON: &str = "application/json";
@@ -21,13 +21,31 @@ pub enum ApiError {
     InvalidFileName,
     #[error("Invalid file format: File is not a valid ZIP archive")]
     InvalidFileFormat,
+    #[error("Project with ID == {0} not found")]
+    ProjectIdNotFound(u32),
+    #[error("Failed to retrieve the user's directories")]
+    NotFoundUserDir,
+    #[error("Invalid system time")]
+    InvalidSystemTime,
+    #[error("Could not find the directory at path: <{0}>")]
+    NotFoundDirByPath(String),
+    #[error("ZipError: {0}")]
+    ZipError(#[from] zip::result::ZipError),
+    // todo покрыть отсюда тестами
+    #[error("The string entered must be a URL")]
+    InvalidUrl,
+    #[error("Your token failed validation, please try again")]
+    InvalidToken,
+    #[error("Could not create the file")]
+    CouldNotCreateFile,
+    #[error("Couldn't find a test case with ID == {0}")]
+    CouldNotFindTestCaseById(u32)
 }
 
 /// Basic api client
 pub struct BaseApiClient {
     client: Client,
-    base_url: Url,
-    api_key: String,
+    pub base_url: Url,
 }
 
 impl BaseApiClient {
@@ -80,9 +98,8 @@ impl BaseApiClient {
 
         Ok(
             Self { 
-                client: client, 
+                client, 
                 base_url: parse_base_url, 
-                api_key: api_key.to_string() 
         })
     }
 
@@ -116,6 +133,9 @@ mod tests {
     use tokio::fs::File;
     use tokio::io::AsyncReadExt;
     use std::path::Path;
+    use zip::ZipArchive;
+    use reqwest::multipart::{Form, Part};
+    use std::fs;
 
     use super::*;
 
@@ -177,7 +197,7 @@ mod tests {
         let api_key = env::var("TESTOPS_API_TOKEN").unwrap();
         let base_api_client = BaseApiClient::new(&base_url, &api_key).unwrap();
 
-        assert!(!base_api_client.api_key.is_empty());
+        // assert!(!base_api_client.api_key.is_empty());
         assert!(!base_api_client.base_url.as_str().is_empty());
     }
 
@@ -305,6 +325,30 @@ mod tests {
         assert!(
             format!("{}", api_error).starts_with("Deserialization error: "),
             "{}", format!("Ожидали, что ошибка будет начинаться с 'Deserialization error: ', получили {}", api_error.to_string())
+        );
+    }
+
+    #[test]
+    fn test_zip_error_handling() {
+        // Данные, которые не соответствуют формату ZIP
+        let data = b"this is data";
+        let reader = std::io::Cursor::new(&data[..]);
+
+        // Пытаемся создать архив из невалидного буфера
+        let result = ZipArchive::new(reader).map_err(ApiError::from);
+        assert!(result.is_err());
+        assert!(matches!(result, Err(ApiError::ZipError(_))));
+    }
+
+    #[test]
+    fn test_not_found_dir_error() {
+        let result = fs::read_dir("non/existent/path")
+            .map_err(|_| ApiError::NotFoundDirByPath("non/existent/path".to_string()));
+        
+        assert!(matches!(result, Err(ApiError::NotFoundDirByPath(_))));
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "Could not find the directory at path: <non/existent/path>"
         );
     }
 }

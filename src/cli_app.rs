@@ -5,7 +5,7 @@ use crate::errors::WotError;
 #[derive(Parser)]
 #[command(
     name = "wot",
-    version = "0.2.1",
+    version = "0.2.3",
     author = "Valentin Semenov <valentin@semenov-aqa.ru>",
     about = "CLI application for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops",
     long_about = None,

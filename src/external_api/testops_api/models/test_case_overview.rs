@@ -21,12 +21,12 @@ impl TestCaseOverview {
         self.custom_fields.as_ref().map_or_else(Vec::new, |fields| {
             fields.iter()
                 .filter_map(|field| {
-                    Some(match field.custom_field.name.as_str() {
+                    Some(match field.custom_field.name.to_ascii_lowercase().as_str() {
                         "epic" => AllureMetaData::epic(&field.name),
                         "feature" => AllureMetaData::feature(&field.name),
                         "story" => AllureMetaData::story(&field.name),
                         "suite" => AllureMetaData::suite(&field.name),
-                        _ => AllureMetaData::label(&field.name),
+                        _ => AllureMetaData::label(&field.custom_field.name, &field.name),
                     })
                 })
                 .collect()
@@ -50,11 +50,9 @@ impl TestCaseOverview {
 
     /// Collect docstring for testcase
     pub fn concat_all_description(&self) -> String {
-        let parts = vec![
-            self.description.as_deref(),
-            self.precondition.as_deref(),
-            self.expected_result.as_deref(),
-        ];
+        let parts = vec![self.description.as_deref(), 
+            self.precondition.as_deref(), 
+            self.expected_result.as_deref()];
         // todo тут скорее всего надо будет доделать
         parts.iter()
             .filter_map(|&part| part)

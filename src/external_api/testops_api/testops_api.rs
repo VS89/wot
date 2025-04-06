@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 use std::collections::HashSet;
 use reqwest::multipart::{Form, Part};
@@ -9,16 +8,25 @@ use super::models::get_launch_by_id::GetLaunchByIdResponse;
 use super::models::response_launch_upload::ResponseLaunchUpload;
 use super::models::launch_info::LaunchInfo; 
 use super::models::response_get_all_project::ResponseGetAllProject; 
-use super::models::project_info::ProjectInfo;     
+use super::models::project_info::ProjectInfo;  
+use super::models::test_case_overview::TestCaseOverview;
+use super::models::test_case_scenario::Scenario;   
 
 
 pub struct TestopsApi {
-    client: BaseApiClient,
+    pub client: BaseApiClient,
     api_prefix: String,
 }
 
 impl TestopsApi {
-    pub fn new() -> Self {
+    pub fn new(api_key: &str, base_url: &str) -> Self {
+        let base_api_client = BaseApiClient::new(base_url, api_key).unwrap();
+        Self { client: base_api_client, api_prefix: "/api/rs".to_string() }
+    }
+
+    #[cfg(test)]
+    pub fn default() -> Self {
+        use std::env;
         let base_url = env::var("TESTOPS_BASE_URL").unwrap();
         let api_key = env::var("TESTOPS_API_TOKEN").unwrap();
         let base_api_client = BaseApiClient::new(&base_url, &api_key).unwrap();
@@ -75,33 +83,12 @@ impl TestopsApi {
         self.client.get::<ProjectInfo, ()>(&format!("{}/project/{}", self.api_prefix, project_id)).await
     }
 
-    // /// Get testcasse overview by testcase_id
-    // pub async fn get_test_case_overview_by_id(
-    //     &self,
-    //     test_case_id: u32,
-    // ) -> Result<TestCaseOverview, Box<dyn Error>> {
-    //     let response = self
-    //         .get(format!("/testcase/{}/overview", test_case_id), None)
-    //         .await?;
-    //     if response.is_empty() {
-    //         return Err(WotApiError::EmptyResponse("/testcase/<id>/overview".to_string()).into());
-    //     }
-    //     match serde_json::from_str::<TestCaseOverview>(&response) {
-    //         Ok(value) => Ok(value),
-    //         Err(e) => Err(WotApiError::ParsingResponse(
-    //             "/testcase/<id>/overview".to_string(),
-    //             e.to_string(),
-    //         )
-    //         .into()),
-    //     }
-    // }
-    pub async fn get_test_case_overview_by_id(&self, test_case_id: &u32) -> Result<(), ApiError> {
-        // let response = self.client.get(&format!("{}/testcase/{}/overview", self.api_prefix, test_case_id)).await;
-        Ok(())
+    pub async fn get_test_case_overview_by_id(&self, test_case_id: &u32) -> Result<TestCaseOverview, ApiError> {
+        self.client.get::<TestCaseOverview, ()>(&format!("{}/testcase/{}/overview", self.api_prefix, test_case_id)).await
     }
 
-    pub async fn get_testcase_scenario(&self) -> Result<(), ApiError> {
-        Ok(())
+    pub async fn get_testcase_scenario(&self, test_case_id: &u32) -> Result<Scenario, ApiError> {
+        self.client.get::<Scenario, ()>(&format!("{}/testcase/{}/step", self.api_prefix, test_case_id)).await
     }
 }
 
@@ -115,14 +102,14 @@ mod tests {
 
     #[test]
     fn test_field_api_prefix() {
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         assert_eq!(testops_api.api_prefix, "/api/rs")
     }
 
     #[tokio::test]
     async fn test_get_projet_by_id() {
         // Создаем структуру
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         let resp: Project = testops_api.get_project_by_id(2).await.unwrap();
         assert_eq!("TestProject", resp.name);
         assert_eq!(2, resp.id);
@@ -133,14 +120,14 @@ mod tests {
         let file_path = Path::new(env::var("CARGO_MANIFEST_DIR").unwrap().as_str())
             .join("test_files/testops_results_report_1735389182.zip");
         let launch_info = LaunchInfo::default();
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         let resp: ResponseLaunchUpload = testops_api.post_upload_report(&file_path, &launch_info).await.unwrap();
         assert!(resp.launch_id != 0);
     }
 
     #[tokio::test]
     async fn test_get_all_project_ids() {
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         let response = testops_api.get_all_project_ids().await;
         assert!(response.is_ok());
         assert!(response.unwrap().contains(TEST_PROJECT_ID), "Не нашли проект с id == {}", TEST_PROJECT_ID);
@@ -148,7 +135,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_project_info_by_id() {
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         let response = testops_api.get_project_info_by_id(TEST_PROJECT_ID).await;
         assert!(response.is_ok());
         assert_eq!(TEST_PROJECT_NAME, response.unwrap().name);
@@ -156,18 +143,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_project_info_by_id_nonexistent_project() {
-        let testops_api = TestopsApi::new();
+        let testops_api = TestopsApi::default();
         let response = testops_api.get_project_info_by_id(&9999).await;
         assert!(response.is_err());
         assert!(matches!(response.unwrap_err(), ApiError::Api(_, _)));
     }
 
-    // #[tokio::test]
-    // async fn test_get_project_by_id() {
-    //     let resp = testops_api_client()
-    //         .get_project_info_by_id(&2)
-    //         .await
-    //         .unwrap();
-    //     assert_eq!("TestProject", resp.name);
-    // }
+    #[tokio::test]
+    async fn test_get_test_case_overview() {
+        let testops_api = TestopsApi::default();
+        let response = testops_api.get_test_case_overview_by_id(&24013).await;
+        assert!(response.is_ok());
+        assert_eq!(response.unwrap().id, 24013);
+    }
+
+    #[tokio::test]
+    async fn test_get_test_case_overview_nonexistent_test() {
+        let testops_api = TestopsApi::default();
+        let response = testops_api.get_test_case_overview_by_id(&99999).await;
+        assert!(response.is_err());
+        assert!(matches!(response.unwrap_err(), ApiError::Api(_, _)));
+    }
 }
