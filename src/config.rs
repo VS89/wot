@@ -1,9 +1,8 @@
 use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
-use crate::errors::{WotError, COULD_READ_LINE};
+use super::external_api::ApiError;
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
-use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::path::PathBuf;
@@ -19,13 +18,12 @@ pub struct Config {
 
 impl Config {
     /// Created app config
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self, ApiError> {
         println!("{}", ENTER_INSTANCE_URL_TESTOPS);
-        let testops_base_url = validate_url(get_data_from_user_input())?;
+        let testops_base_url = validate_url(get_data_from_user_input()?)?;
 
         println!("{}", ENTER_TESTOPS_API_KEY);
-        let testops_api_token = get_data_from_user_input();
-        let _ = validate_testops_api_token(&testops_api_token)?;
+        let testops_api_token = validate_testops_api_token(&get_data_from_user_input()?)?;
         println!("{}", COMPLETE_SETUP);
 
         Ok(Self {
@@ -35,39 +33,34 @@ impl Config {
     }
 
     /// Get data from app config
-    pub fn get_config(path_to_config: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn get_config(path_to_config: PathBuf) -> Result<Self, ApiError> {
         let file = File::open(path_to_config)?;
-        match serde_json::from_reader(file) {
-            Ok(config) => Ok(config),
-            Err(_) => Err(WotError::NotParseConfig.into()),
-        }
+        serde_json::from_reader(file).map_err(ApiError::Serde)
     }
 }
 
-fn validate_url(mut value: String) -> Result<String, WotError> {
+fn validate_url(mut value: String) -> Result<String, ApiError> {
     let regex = Regex::new(r"^https?://.+$").unwrap();
+    value.truncate(value.trim_end_matches('/').len());
+
     if !regex.is_match(&value) {
-        return Err(WotError::InvalidURL);
-    }
-    if value.ends_with('/') {
-        value.pop();
+        return Err(ApiError::InvalidUrl)
     }
     Ok(value)
 }
 
-fn validate_testops_api_token(value: &str) -> Result<bool, WotError> {
+fn validate_testops_api_token(value: &str) -> Result<String, ApiError> {
     if Uuid::parse_str(value).is_err() {
-        return Err(WotError::InvalidToken);
+        return Err(ApiError::InvalidToken);
     }
-    Ok(true)
+    Ok(value.to_string())
 }
 
-fn get_data_from_user_input() -> String {
+// todo поискать/посмотреть как правильно тестить такие штуки
+fn get_data_from_user_input() -> Result<String, ApiError> {
     let mut input_value = String::new();
-    io::stdin()
-        .read_line(&mut input_value)
-        .expect(COULD_READ_LINE);
-    input_value.trim().to_string()
+    io::stdin().read_line(&mut input_value)?;
+    Ok(input_value.trim().to_string())
 }
 
 #[cfg(test)]
@@ -78,6 +71,7 @@ mod tests {
     #[test_case(String::from("http://instance.ru/api/rs"), String::from("http://instance.ru/api/rs"); "http")]
     #[test_case(String::from("https://example.com"), String::from("https://example.com"); "https")]
     #[test_case(String::from("https://instance.ru/"), String::from("https://instance.ru"); "last_char_slash")]
+    #[test_case(String::from("https://example.com////"), String::from("https://example.com"); "multiple_slashes")]
     fn test_valid_url(url: String, exp_url: String) {
         let res = validate_url(url).unwrap();
         assert_eq!(res, exp_url, "Ожидали, что URL '{res}' пройдет валидацию");
@@ -97,8 +91,9 @@ mod tests {
     fn test_testops_api_token_valid() {
         let uuid_token = Uuid::new_v4().to_string();
         let res = validate_testops_api_token(&uuid_token).unwrap();
-        assert!(
+        assert_eq!(
             res,
+            uuid_token,
             "Ожидали, что api_token: {} пройдет валидацию",
             uuid_token
         );
@@ -119,6 +114,6 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         ));
         let error = Config::get_config(path).unwrap_err();
-        assert_eq!("Couldn't parse the config", error.to_string());
+        assert_eq!("Deserialization error: missing field `testops_base_url` at line 1 column 2", error.to_string());
     }
 }
