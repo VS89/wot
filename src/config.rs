@@ -1,5 +1,5 @@
 use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
-use crate::external_api::base_api_client::ApiError;
+use super::external_api::ApiError;
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;

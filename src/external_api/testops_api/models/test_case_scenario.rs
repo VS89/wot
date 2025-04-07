@@ -7,10 +7,31 @@ pub struct Scenario {
     pub scenario_steps: HashMap<String, ScenarioStep>,
 }
 
+impl Scenario {
+
+    #[cfg(test)]
+    pub fn default() -> Self {
+        let mut steps = HashMap::new();
+        steps.insert("123".to_string(), ScenarioStep::default());
+        Self { 
+            root: Root::default(), 
+            scenario_steps: steps,
+        }
+    }
+}
+
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Root {
     children: Vec<u64>
+}
+
+impl Root {
+
+    #[cfg(test)]
+    pub fn default() -> Self {
+        Self { children: vec![123] }
+    }
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
@@ -22,6 +43,14 @@ pub struct ScenarioStep {
     expected_result_id: Option<u64>,
     #[serde(default)]
     children: Option<Vec<u64>>,
+}
+
+impl ScenarioStep {
+
+    #[cfg(test)]
+    pub fn default() -> Self {
+        Self { id: 111, body: "111_body".to_string(), expected_result_id: None, children: None }
+    }
 }
 
 

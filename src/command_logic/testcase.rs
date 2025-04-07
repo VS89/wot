@@ -1,6 +1,6 @@
-use crate::external_api::base_api_client::ApiError;
-use crate::external_api::testops_api::testops_api::TestopsApi;
-use crate::create_template_python_ati_su;
+use crate::external_api::ApiError;
+use crate::external_api::testops_api::TestopsApi;
+use crate::create_template::ati_su_python_template_test::create_template_python_ati_su;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Import testcase by id from TestOps
@@ -14,7 +14,7 @@ pub async fn import_testcase_by_id(
         .await.map_err(|_| ApiError::CouldNotFindTestCaseById(test_case_id))?;
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let file_name = format!("test_{}_{}.py", timestamp, test_case_id);
-    let full_path_to_file = create_template_python_ati_su(test_case_overview, test_case_scenario, &file_name)?;
+    let full_path_to_file = create_template_python_ati_su(test_case_overview, test_case_scenario, &file_name).await?;
     println!("File created: {}", full_path_to_file);
     Ok(())
 }

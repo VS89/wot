@@ -1,8 +1,9 @@
 use crate::constants::Message;
 
-use crate::external_api::base_api_client::ApiError;
-use crate::{validate_project_id, zip_directory};
-use crate::external_api::testops_api::testops_api::TestopsApi;
+
+use crate::external_api::ApiError;
+use crate::utils::{validate_project_id, zip_directory};
+use crate::external_api::testops_api::TestopsApi;
 use crate::external_api::testops_api::models::launch_info::LaunchInfo;
 use crate::external_api::testops_api::models::response_launch_upload::ResponseLaunchUpload;
 use std::fs;

@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 
-use crate::errors::WotError;
+use crate::external_api::ApiError;
 
 #[derive(Parser)]
 #[command(
@@ -41,7 +41,7 @@ pub struct TestcaseArgs {
     pub import_testcase_id: u32,
 }
 
-fn validate_u32_more_then_zero(value: &str) -> Result<u32, WotError> {
-    let project_id: u32 = value.parse().map_err(|_| WotError::ProjectIdMoreThenZero)?;
+fn validate_u32_more_then_zero(value: &str) -> Result<u32, ApiError> {
+    let project_id: u32 = value.parse().map_err(|_| ApiError::ProjectIdMoreThenZero)?;
     Ok(project_id)
 }
