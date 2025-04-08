@@ -1,6 +1,6 @@
 [package]
 name = "wot"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 authors = ["Valentin Semenov <spbvalek@gmail.com>"]
 description = "Plugin for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops"
@@ -17,6 +17,7 @@ clap = { version = "4.5.23", features = ["derive"] }
 chrono = "0.4.39"
 uuid = { version = "1.11.1", features = ["v4"] }
 thiserror = "2.0.12"
+rstest = "0.25.0"
 
 [dev-dependencies]
 test-case = "*"
