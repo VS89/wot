@@ -30,13 +30,20 @@ async fn main() -> Result<(), ApiError> {
             let config = Config::get_config(path)?;
             let testops_api = TestopsApi::new(&config.testops_api_token, &config.testops_base_url);
             let cli = Cli::parse();
+            let stdin = std::io::stdin();
+            let stdout = std::io::stdout();
 
             match &cli.command {
                 Commands::Report(value) => {
-                    send_report(&value.directory_path, value.project_id, &testops_api).await?
+                    match send_report(&value.directory_path, value.project_id, &testops_api, stdin.lock(), stdout).await {
+                        Ok(value) => println!("{}", value),
+                        Err(e) => eprintln!("Failed to send report: {}", e),
+                    };
                 }
                 Commands::Testcase(value) => {
-                    import_testcase_by_id(value.import_testcase_id, &testops_api).await?
+                    let _ = import_testcase_by_id(value.import_testcase_id, &testops_api)
+                        .await
+                        .map_err(|e| eprintln!("Failed to import testcase by id: {}", e));
                 }
             }
         } else {

@@ -2,6 +2,8 @@ pub const CONFIG_DIR: &str = ".config/wot";
 pub const ENTER_INSTANCE_URL_TESTOPS: &str = "Enter the url of the testops instance: ";
 pub const ENTER_TESTOPS_API_KEY: &str = "Enter the TestOps API key: ";
 pub const COMPLETE_SETUP: &str = "To view the available commands, type: wot --help";
+#[cfg(test)]
+pub const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Standard message
 #[derive(Debug)]
@@ -16,7 +18,7 @@ impl Message {
         match self {
             Message::LaunchRunFrom(name) => format!("Run from {}", name),
             Message::LaunchLinkDownloaded(testops_instance, launch_id) => format!(
-                "Link to downloaded lunch: {}launch/{}",
+                "Link to downloaded launch: {}launch/{}",
                 testops_instance, launch_id
             ),
             Message::ApproveUploadReport(value) => format!(
@@ -35,7 +37,7 @@ mod tests {
     use rstest::rstest;
 
     fn get_testops_instance_url() -> String {
-        TestopsApi::default().client.base_url.to_string()
+        TestopsApi::default_test().client.base_url.to_string()
     }
 
     #[rstest]
@@ -48,9 +50,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(get_testops_instance_url(), "12345", format!("Link to downloaded lunch: {}launch/12345", get_testops_instance_url()))]
-    #[case("", "", "Link to downloaded lunch: launch/")]
-    #[case("a".repeat(1000), "a".repeat(1000), format!("Link to downloaded lunch: {}launch/{}", "a".repeat(1000), "a".repeat(1000)))]
+    #[case(get_testops_instance_url(), "12345", format!("Link to downloaded launch: {}launch/12345", get_testops_instance_url()))]
+    #[case("", "", "Link to downloaded launch: launch/")]
+    #[case("a".repeat(1000), "a".repeat(1000), format!("Link to downloaded launch: {}launch/{}", "a".repeat(1000), "a".repeat(1000)))]
     fn test_launch_link_downloaded(#[case] instance: String, #[case] launch_id: String, #[case] expected: String) {
         assert_eq!(
             Message::LaunchLinkDownloaded(instance, launch_id).to_formatted_string(),
