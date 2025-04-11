@@ -227,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_project_id_exist() {
-        let testops_api = TestopsApi::default();
+        let testops_api = TestopsApi::default_test();
         let project_id_exist: u32 = 2;
         let res = validate_project_id(project_id_exist, &testops_api)
             .await;
@@ -236,7 +236,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_project_id_nonexist() {
-        let testops_api = TestopsApi::default();
+        let testops_api = TestopsApi::default_test();
         let project_id_nonexist: u32 = 28888;
         let res = validate_project_id(project_id_nonexist, &testops_api)
             .await;
@@ -311,7 +311,7 @@ mod tests {
     #[tokio::test]
     /// Проверяем загрузку лаунча
     async fn test_upload_launch() {
-        let testops_api_client = TestopsApi::default();
+        let testops_api_client = TestopsApi::default_test();
         let launch_info = LaunchInfo::default();
         let path_archive = PathBuf::from(format!(
             "{}/test_files/testops_results_report_1735389182.zip",

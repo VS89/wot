@@ -10,7 +10,7 @@ pub async fn import_testcase_by_id(
 ) -> Result<(), ApiError> {
     let test_case_overview = testops_api_client.get_test_case_overview_by_id(&test_case_id)
         .await.map_err(|_| ApiError::CouldNotFindTestCaseById(test_case_id))?;
-    let test_case_scenario = testops_api_client.get_testcase_scenario(&test_case_id)
+    let test_case_scenario = testops_api_client.get_test_case_scenario(&test_case_id)
         .await.map_err(|_| ApiError::CouldNotFindTestCaseById(test_case_id))?;
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let file_name = format!("test_{}_{}.py", timestamp, test_case_id);
