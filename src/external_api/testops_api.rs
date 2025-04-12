@@ -87,8 +87,6 @@ mod tests {
     use mockito::Server;
     use crate::constants::CARGO_MANIFEST_DIR;
 
-    const TEST_PROJECT_ID: &u32 = &2;
-
     impl TestopsApi {
 
         pub fn default_test() -> Self {
@@ -168,6 +166,31 @@ mod tests {
                 .with_status(200)
                 .with_header("content-type", "application/json")
                 .with_body(serde_json::to_string(&response_page_1).unwrap())
+                .create_async().await;
+        }
+
+        pub async fn mock_get_test_case_overview_by_id(
+            server_mock: &mut mockito::ServerGuard,
+            mock_response: &TestCaseOverview,
+        ) {
+            let endpoint = mockito::Matcher::Exact(format!("/api/rs/testcase/{}/overview", &mock_response.id));
+            server_mock.mock("GET", endpoint)
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(serde_json::to_string(&mock_response).unwrap())
+                .create_async().await;
+        }
+
+        pub async fn mock_get_test_case_scenario(
+            server_mock: &mut mockito::ServerGuard,
+            mock_response: &Scenario,
+            test_case_id: u32,
+        ) {
+            let endpoint = mockito::Matcher::Exact(format!("/api/rs/testcase/{}/step", test_case_id));
+            server_mock.mock("GET", endpoint)
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(serde_json::to_string(&mock_response).unwrap())
                 .create_async().await;
         }
     

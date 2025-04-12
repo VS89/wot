@@ -15,22 +15,6 @@ pub struct TestCaseOverview {
     pub tags: Option<Vec<Tag>>,
 }
 
-impl TestCaseOverview {
-
-    #[cfg(test)]
-    pub fn default() -> Self {
-        Self { 
-            id: 1234, 
-            project_id: 222, 
-            name: "Some name case".to_string(), 
-            description: None, 
-            precondition: None, 
-            expected_result: None, 
-            custom_fields: None, 
-            tags: None 
-        }
-    }
-}
 
 impl TestCaseOverview {
 
@@ -56,7 +40,7 @@ impl TestCaseOverview {
         if let Some(tags) = &self.tags {
             let tag_list = tags.iter()
                 .map(|t| format!("'{}'", t.name))
-                .collect::<Vec<_>>()
+                .collect::<Vec<String>>()
                 .join(", ");
             if !tag_list.is_empty() {
                 allure_decorators.push(format!("@allure.tag({})", tag_list));
@@ -83,6 +67,26 @@ mod tests {
     use crate::external_api::testops_api::models::custom_field::CustomField;
     use crate::external_api::testops_api::models::custom_field_info::CustomFieldInfo;
 
+    impl TestCaseOverview {
+
+        fn with_defaults() -> Self {
+            Self { 
+                id: 1234, 
+                project_id: 222, 
+                name: "Some name case".to_string(), 
+                description: None, 
+                precondition: None, 
+                expected_result: None, 
+                custom_fields: None, 
+                tags: None 
+            }
+        }
+
+        pub fn default() -> Self {
+            Self::with_defaults()
+        }
+    }
+
     fn create_custom_field(name: &str, value: &str) -> CustomFieldInfo {
         CustomFieldInfo {
             id: 1,
@@ -98,7 +102,7 @@ mod tests {
             name: "Some name".to_string(),
             description: None,
             precondition: None,
-            custom_fields: custom_fields,
+            custom_fields,
             expected_result: None,
             tags: None
         }

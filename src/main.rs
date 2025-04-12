@@ -12,7 +12,7 @@ use external_api::ApiError;
 use external_api::testops_api::TestopsApi;
 use std::fs::File;
 use std::path::Path;
-use cli_app::{Cli, Commands};
+use cli_app::{handle_command, Cli};
 use command_logic::report::send_report;
 use command_logic::testcase::import_testcase_by_id;
 use config::Config;
@@ -33,19 +33,7 @@ async fn main() -> Result<(), ApiError> {
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
 
-            match &cli.command {
-                Commands::Report(value) => {
-                    match send_report(&value.directory_path, value.project_id, &testops_api, stdin.lock(), stdout).await {
-                        Ok(value) => println!("{}", value),
-                        Err(e) => eprintln!("Failed to send report: {}", e),
-                    };
-                }
-                Commands::Testcase(value) => {
-                    let _ = import_testcase_by_id(value.import_testcase_id, &testops_api)
-                        .await
-                        .map_err(|e| eprintln!("Failed to import testcase by id: {}", e));
-                }
-            }
+            handle_command(cli, &testops_api, stdin, stdout).await;
         } else {
             let app = Config::new()?;
             if let Some(parent_dir) = path.parent() {

@@ -45,7 +45,7 @@ pub fn validate_zip_archive(buffer: &Vec<u8>) -> Result<(), ApiError> {
 /// Create file in current directory
 ///
 /// Return full path to created file
-pub async fn create_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, ApiError> {
+pub async fn save_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, ApiError> {
     let mut file = File::create(file_name).await.map_err(|_| ApiError::CouldNotCreateFile)?;
     file.write_all(content).await.map_err(|_| ApiError::CouldNotCreateFile)?;
     let mut path = std::env::current_dir().map_err(|_| ApiError::CouldNotCreateFile)?;
