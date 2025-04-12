@@ -47,6 +47,8 @@ pub enum ApiError {
     CantCreateConfig,
     #[error("The project ID must be greater than zero")]
     ProjectIdMoreThenZero,
+    #[error("Upload cancelled by user")]
+    UploadCancelledByUser
 }
 
 /// Basic api client
@@ -357,5 +359,41 @@ mod tests {
             result.unwrap_err().to_string(),
             "Could not find the directory at path: <non/existent/path>"
         );
+    }
+
+    #[test]
+    fn test_invalid_url() {
+        assert_eq!(ApiError::InvalidUrl.to_string(), "The string entered must be a URL".to_string());
+    }
+
+    #[test]
+    fn test_invalid_token() {
+        assert_eq!(ApiError::InvalidToken.to_string(), "Your token failed validation, please try again".to_string());
+    }
+
+    #[test]
+    fn test_could_not_create_file() {
+        assert_eq!(ApiError::CouldNotCreateFile.to_string(), "Could not create the file".to_string());
+    }
+
+    #[test]
+    fn test_could_not_find_test_case_by_id() {
+        assert_eq!(ApiError::CouldNotFindTestCaseById(12345).to_string(), 
+        format!("Couldn't find a test case with ID == {}", 12345).to_string());
+    }
+
+    #[test]
+    fn test_cant_craete_config() {
+        assert_eq!(ApiError::CantCreateConfig.to_string(), "Couldn't create a config".to_string());
+    }
+
+    #[test]
+    fn test_project_id_more_then_zero() {
+        assert_eq!(ApiError::ProjectIdMoreThenZero.to_string(), "The project ID must be greater than zero".to_string());
+    }
+
+    #[test]
+    fn test_upload_cancelled_by_user() {
+        assert_eq!(ApiError::UploadCancelledByUser.to_string(), "Upload cancelled by user".to_string());
     }
 }

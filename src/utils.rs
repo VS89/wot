@@ -45,7 +45,7 @@ pub fn validate_zip_archive(buffer: &Vec<u8>) -> Result<(), ApiError> {
 /// Create file in current directory
 ///
 /// Return full path to created file
-pub async fn create_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, ApiError> {
+pub async fn save_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, ApiError> {
     let mut file = File::create(file_name).await.map_err(|_| ApiError::CouldNotCreateFile)?;
     file.write_all(content).await.map_err(|_| ApiError::CouldNotCreateFile)?;
     let mut path = std::env::current_dir().map_err(|_| ApiError::CouldNotCreateFile)?;
@@ -227,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_project_id_exist() {
-        let testops_api = TestopsApi::default();
+        let testops_api = TestopsApi::default_test();
         let project_id_exist: u32 = 2;
         let res = validate_project_id(project_id_exist, &testops_api)
             .await;
@@ -236,7 +236,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_project_id_nonexist() {
-        let testops_api = TestopsApi::default();
+        let testops_api = TestopsApi::default_test();
         let project_id_nonexist: u32 = 28888;
         let res = validate_project_id(project_id_nonexist, &testops_api)
             .await;
@@ -311,7 +311,7 @@ mod tests {
     #[tokio::test]
     /// Проверяем загрузку лаунча
     async fn test_upload_launch() {
-        let testops_api_client = TestopsApi::default();
+        let testops_api_client = TestopsApi::default_test();
         let launch_info = LaunchInfo::default();
         let path_archive = PathBuf::from(format!(
             "{}/test_files/testops_results_report_1735389182.zip",
