@@ -9,9 +9,12 @@ pub struct ResponseLaunchUpload {
 }
 
 impl ResponseLaunchUpload {
-
     #[cfg(test)]
     pub fn default() -> Self {
-        Self { launch_id: 11111, test_session_id: 1, files_count: 10 }
+        Self {
+            launch_id: 11111,
+            test_session_id: 1,
+            files_count: 10,
+        }
     }
 }

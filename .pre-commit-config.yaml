@@ -10,9 +10,13 @@ repos:
         args: ["--", "-D", "warnings"]
         types: [rust]
         pass_filenames: false
-
-  - repo: local
-    hooks:
+      - id: formatting
+        name: formatting
+        description: Rust standard format codestyle
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        pass_filenames: false
       - id: cargo-test
         name: Run cargo test
         entry: cargo test

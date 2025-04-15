@@ -1,5 +1,5 @@
-use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
 use super::external_api::ApiError;
+use crate::constants::{COMPLETE_SETUP, ENTER_INSTANCE_URL_TESTOPS, ENTER_TESTOPS_API_KEY};
 use regex::Regex;
 use serde::Deserialize;
 use serde::Serialize;
@@ -44,7 +44,7 @@ fn validate_url(mut value: String) -> Result<String, ApiError> {
     value.truncate(value.trim_end_matches('/').len());
 
     if !regex.is_match(&value) {
-        return Err(ApiError::InvalidUrl)
+        return Err(ApiError::InvalidUrl);
     }
     Ok(value)
 }
@@ -92,8 +92,7 @@ mod tests {
         let uuid_token = Uuid::new_v4().to_string();
         let res = validate_testops_api_token(&uuid_token).unwrap();
         assert_eq!(
-            res,
-            uuid_token,
+            res, uuid_token,
             "Ожидали, что api_token: {} пройдет валидацию",
             uuid_token
         );
@@ -114,6 +113,9 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         ));
         let error = Config::get_config(path).unwrap_err();
-        assert_eq!("Deserialization error: missing field `testops_base_url` at line 1 column 2", error.to_string());
+        assert_eq!(
+            "Deserialization error: missing field `testops_base_url` at line 1 column 2",
+            error.to_string()
+        );
     }
 }

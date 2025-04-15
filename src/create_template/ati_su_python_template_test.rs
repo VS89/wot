@@ -1,7 +1,7 @@
-use crate::ApiError;
 use crate::external_api::testops_api::models::test_case_overview::TestCaseOverview;
 use crate::external_api::testops_api::models::test_case_scenario::Scenario;
 use crate::utils::save_file_in_current_directory;
+use crate::ApiError;
 
 fn generate_python_template(
     test_case_overview: &TestCaseOverview,
@@ -42,9 +42,11 @@ class Test1:
     )
 }
 
-
-pub async fn create_template_python_ati_su(test_case_overview: TestCaseOverview,
-    test_case_scenario: Scenario, file_name: &str) -> Result<String, ApiError>{
+pub async fn create_template_python_ati_su(
+    test_case_overview: TestCaseOverview,
+    test_case_scenario: Scenario,
+    file_name: &str,
+) -> Result<String, ApiError> {
     let template = generate_python_template(&test_case_overview, &test_case_scenario);
     save_file_in_current_directory(file_name, template.as_bytes()).await
 }

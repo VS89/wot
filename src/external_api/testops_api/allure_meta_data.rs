@@ -10,7 +10,6 @@ pub enum AllureMetaData {
 }
 
 impl AllureMetaData {
-
     fn create_decorator(tag: &str, value: &str) -> String {
         format!("@allure.{tag}('{value}')")
     }
@@ -32,16 +31,18 @@ impl AllureMetaData {
     }
 
     pub fn label(field_name: &str, value: &str) -> String {
-        format!("@allure.label('{}', '{value}')", field_name.to_ascii_lowercase())
+        format!(
+            "@allure.label('{}', '{value}')",
+            field_name.to_ascii_lowercase()
+        )
     }
 }
-
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    
+
     #[test]
     fn test_epic_creation() {
         let decorator = AllureMetaData::epic("Login");

@@ -1,22 +1,22 @@
-pub mod external_api;
-pub mod utils;
-pub mod constants;
+pub mod cli_app;
 pub mod command_logic;
 pub mod config;
-pub mod cli_app;
+pub mod constants;
 pub mod create_template;
+pub mod external_api;
+pub mod utils;
 
 use clap::Parser;
-use directories::UserDirs;
-use external_api::ApiError;
-use external_api::testops_api::TestopsApi;
-use std::fs::File;
-use std::path::Path;
 use cli_app::{handle_command, Cli};
 use command_logic::report::send_report;
 use command_logic::testcase::import_testcase_by_id;
 use config::Config;
 use constants::CONFIG_DIR;
+use directories::UserDirs;
+use external_api::testops_api::TestopsApi;
+use external_api::ApiError;
+use std::fs::File;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() -> Result<(), ApiError> {
@@ -40,8 +40,8 @@ async fn main() -> Result<(), ApiError> {
                 std::fs::create_dir_all(parent_dir)?;
             }
             let file = File::create(path)?;
-            serde_json::to_writer_pretty(file, &app).unwrap_or_else(
-                |_| panic!("{}", ApiError::CantCreateConfig.to_string()))
+            serde_json::to_writer_pretty(file, &app)
+                .unwrap_or_else(|_| panic!("{}", ApiError::CantCreateConfig.to_string()))
         }
     }
     Ok(())

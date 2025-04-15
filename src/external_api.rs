@@ -1,6 +1,9 @@
 pub mod testops_api;
 
-use reqwest::{header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE}, multipart, Client, StatusCode, Url};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    multipart, Client, StatusCode, Url,
+};
 use thiserror::Error;
 
 const APPLICATION_JSON: &str = "application/json";
@@ -48,7 +51,9 @@ pub enum ApiError {
     #[error("The project ID must be greater than zero")]
     ProjectIdMoreThenZero,
     #[error("Upload cancelled by user")]
-    UploadCancelledByUser
+    UploadCancelledByUser,
+    #[error("Invalid test file name: {0}")]
+    InvalidTestFileName(String),
 }
 
 /// Basic api client
@@ -58,28 +63,29 @@ pub struct BaseApiClient {
 }
 
 impl BaseApiClient {
-
     fn build_url(&self, endpoint: &str) -> Result<Url, ApiError> {
-        self.base_url.join(endpoint).map_err(|e| ApiError::Parse(e.to_string()))
+        self.base_url
+            .join(endpoint)
+            .map_err(|e| ApiError::Parse(e.to_string()))
     }
 
-    fn get_default_headers(api_key: &str) -> Result<HeaderMap, ApiError>{
+    fn get_default_headers(api_key: &str) -> Result<HeaderMap, ApiError> {
         let mut headers = HeaderMap::with_capacity(3);
         headers.insert(ACCEPT, HeaderValue::from_static(APPLICATION_JSON));
         headers.insert(CONTENT_TYPE, HeaderValue::from_static(APPLICATION_JSON));
-        
+
         match HeaderValue::from_str(&format!("Api-Token {}", api_key)) {
             Ok(value) => headers.insert(AUTHORIZATION, value),
-            Err(_) => return Err(ApiError::InvalidApiKey)
+            Err(_) => return Err(ApiError::InvalidApiKey),
         };
-        
+
         Ok(headers)
     }
 
     // todo надо покрыть тестами эту функцию
-    async fn handle_response<T: serde::de::DeserializeOwned> (
+    async fn handle_response<T: serde::de::DeserializeOwned>(
         &self,
-        response: reqwest::Response
+        response: reqwest::Response,
     ) -> Result<T, ApiError> {
         let status = response.status();
         let body = response.text().await?;
@@ -90,7 +96,7 @@ impl BaseApiClient {
 
         match serde_json::from_str(&body) {
             Ok(value) => Ok(value),
-            Err(e) => Err(ApiError::Serde(e))
+            Err(e) => Err(ApiError::Serde(e)),
         }
     }
 
@@ -102,13 +108,11 @@ impl BaseApiClient {
             .timeout(std::time::Duration::from_secs(10))
             .build()?;
 
-        let parse_base_url = Url::parse(base_url)
-            .map_err(|e| ApiError::Parse(e.to_string()))?;
+        let parse_base_url = Url::parse(base_url).map_err(|e| ApiError::Parse(e.to_string()))?;
 
-        Ok(
-            Self { 
-                client, 
-                base_url: parse_base_url, 
+        Ok(Self {
+            client,
+            base_url: parse_base_url,
         })
     }
 
@@ -117,7 +121,7 @@ impl BaseApiClient {
         endpoint: &str,
     ) -> Result<T, ApiError> {
         let url = self.build_url(endpoint)?;
-        let response= self.client.get(url).send().await?;
+        let response = self.client.get(url).send().await?;
         self.handle_response(response).await
     }
 
@@ -132,19 +136,16 @@ impl BaseApiClient {
     }
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
 
+    use reqwest::multipart::{Form, Part};
     use std::env;
+    use std::fs;
+    use std::path::Path;
     use tokio::fs::File;
     use tokio::io::AsyncReadExt;
-    use std::path::Path;
     use zip::ZipArchive;
-    use reqwest::multipart::{Form, Part};
-    use std::fs;
 
     use super::*;
 
@@ -185,17 +186,33 @@ mod tests {
 
         // Создаем multipart с данными файла
         // todo: возможно получение имени файла стоит вынести в отдельную функцию
-        let file_name = file_path.file_name()
+        let file_name = file_path
+            .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| ApiError::InvalidFileName).unwrap();
-        let file_part = Part::bytes(buffer).file_name(file_name).mime_str("application/zip").unwrap();
+            .ok_or_else(|| ApiError::InvalidFileName)
+            .unwrap();
+        let file_part = Part::bytes(buffer)
+            .file_name(file_name)
+            .mime_str("application/zip")
+            .unwrap();
 
-        let info_file_json = serde_json::to_string(&LaunchInfo{name: "test_launch".to_string(), project_id: 2}).unwrap();
-        let info_file_multipart = Part::text(info_file_json).mime_str("application/json").unwrap();
+        let info_file_json = serde_json::to_string(&LaunchInfo {
+            name: "test_launch".to_string(),
+            project_id: 2,
+        })
+        .unwrap();
+        let info_file_multipart = Part::text(info_file_json)
+            .mime_str("application/json")
+            .unwrap();
 
         // Собираем форму с файлом
-        let form = Form::new().part("info", info_file_multipart).part("archive", file_part);
-        let result = base_api_client.post_multipart_file::<ResponseLaunchUpload, ()>("/api/rs/launch/upload", form).await.unwrap();
+        let form = Form::new()
+            .part("info", info_file_multipart)
+            .part("archive", file_part);
+        let result = base_api_client
+            .post_multipart_file::<ResponseLaunchUpload, ()>("/api/rs/launch/upload", form)
+            .await
+            .unwrap();
         assert!(result.launch_id != 0);
     }
 
@@ -217,7 +234,10 @@ mod tests {
         let api_key = env::var("TESTOPS_API_TOKEN").unwrap();
         let base_api_client = BaseApiClient::new(&base_url, &api_key).unwrap();
 
-        let project: Project = base_api_client.get::<Project, ()>("/api/rs/project/2").await.unwrap();
+        let project: Project = base_api_client
+            .get::<Project, ()>("/api/rs/project/2")
+            .await
+            .unwrap();
         assert!(!project.name.is_empty());
     }
 
@@ -228,14 +248,17 @@ mod tests {
         let api_key = env::var("TESTOPS_API_TOKEN").unwrap();
         let base_api_client = BaseApiClient::new(&base_url, &api_key).unwrap();
 
-        let result = base_api_client.get::<(), ()>("/api/rs/project/9999").await.unwrap_err();
+        let result = base_api_client
+            .get::<(), ()>("/api/rs/project/9999")
+            .await
+            .unwrap_err();
         let api_error = ApiError::from(result);
         assert!(matches!(api_error, ApiError::Api(_, _)));
         assert!(format!("{}", api_error).starts_with("Api error"));
     }
 
     #[test]
-    fn test_build_url_positive(){
+    fn test_build_url_positive() {
         // Создаем структуру
         let base_url = env::var("TESTOPS_BASE_URL").unwrap();
         let api_key = env::var("TESTOPS_API_TOKEN").unwrap();
@@ -246,7 +269,12 @@ mod tests {
 
         // Проверяем, что получили правильный урл
         let exp_url = format!("{}{}", base_url, "/new_url");
-        assert_eq!(exp_url, new_url, "{}", format!("Ожидали URL == {}. Получили == {}", exp_url, new_url));
+        assert_eq!(
+            exp_url,
+            new_url,
+            "{}",
+            format!("Ожидали URL == {}. Получили == {}", exp_url, new_url)
+        );
     }
 
     #[test]
@@ -264,7 +292,7 @@ mod tests {
     fn test_invalid_api_key() {
         let api_key_err = BaseApiClient::get_default_headers("invalid\nkey").unwrap_err();
         assert!(
-            matches!(api_key_err, ApiError::InvalidApiKey), 
+            matches!(api_key_err, ApiError::InvalidApiKey),
             "Ожидали ошибку ApiError::InvalidApiKey, получили другую"
         );
     }
@@ -280,7 +308,11 @@ mod tests {
         assert!(matches!(api_error, ApiError::Parse(_)));
         assert!(
             format!("{}", api_error).starts_with("URL parse error: "),
-            "{}", format!("Ожидали, что ошибка будет начинаться с 'URL parse error: '. Получили {}", api_error.to_string())
+            "{}",
+            format!(
+                "Ожидали, что ошибка будет начинаться с 'URL parse error: '. Получили {}",
+                api_error.to_string()
+            )
         );
     }
 
@@ -293,14 +325,18 @@ mod tests {
         // Конвертируем в ApiError
         let api_error = ApiError::from(err_reqwest);
 
-        // Проверяем тип ошибки и сообщение 
+        // Проверяем тип ошибки и сообщение
         assert!(
-            matches!(api_error, ApiError::Reqwest(_)), 
+            matches!(api_error, ApiError::Reqwest(_)),
             "Получили не тот тип ошибки, который ожидали."
         );
         assert!(
-            format!("{}", api_error).starts_with("Network error: "), 
-            "{}", format!("Сообщение об ошибке должно начинаться с 'Network error: '. Получили ошибку: {}", api_error)
+            format!("{}", api_error).starts_with("Network error: "),
+            "{}",
+            format!(
+                "Сообщение об ошибке должно начинаться с 'Network error: '. Получили ошибку: {}",
+                api_error
+            )
         );
     }
 
@@ -316,8 +352,13 @@ mod tests {
             "Получили не тот тип ошибки, который ожидали."
         );
         assert_eq!(
-            exp_api_error_txt, string_api_error,
-            "{}", format!("Ожидали ошибку: {}, получили: {}", exp_api_error_txt, string_api_error)
+            exp_api_error_txt,
+            string_api_error,
+            "{}",
+            format!(
+                "Ожидали ошибку: {}, получили: {}",
+                exp_api_error_txt, string_api_error
+            )
         )
     }
 
@@ -330,10 +371,17 @@ mod tests {
         let api_error = ApiError::Serde(serde_error);
 
         // Проверяем тип ошибки и сообщение
-        assert!(matches!(api_error, ApiError::Serde(_)), "Получили не тот тип ошибки, который ожидали");
+        assert!(
+            matches!(api_error, ApiError::Serde(_)),
+            "Получили не тот тип ошибки, который ожидали"
+        );
         assert!(
             format!("{}", api_error).starts_with("Deserialization error: "),
-            "{}", format!("Ожидали, что ошибка будет начинаться с 'Deserialization error: ', получили {}", api_error.to_string())
+            "{}",
+            format!(
+                "Ожидали, что ошибка будет начинаться с 'Deserialization error: ', получили {}",
+                api_error.to_string()
+            )
         );
     }
 
@@ -353,7 +401,7 @@ mod tests {
     fn test_not_found_dir_error() {
         let result = fs::read_dir("non/existent/path")
             .map_err(|_| ApiError::NotFoundDirByPath("non/existent/path".to_string()));
-        
+
         assert!(matches!(result, Err(ApiError::NotFoundDirByPath(_))));
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -363,37 +411,66 @@ mod tests {
 
     #[test]
     fn test_invalid_url() {
-        assert_eq!(ApiError::InvalidUrl.to_string(), "The string entered must be a URL".to_string());
+        assert_eq!(
+            ApiError::InvalidUrl.to_string(),
+            "The string entered must be a URL".to_string()
+        );
     }
 
     #[test]
     fn test_invalid_token() {
-        assert_eq!(ApiError::InvalidToken.to_string(), "Your token failed validation, please try again".to_string());
+        assert_eq!(
+            ApiError::InvalidToken.to_string(),
+            "Your token failed validation, please try again".to_string()
+        );
     }
 
     #[test]
     fn test_could_not_create_file() {
-        assert_eq!(ApiError::CouldNotCreateFile.to_string(), "Could not create the file".to_string());
+        assert_eq!(
+            ApiError::CouldNotCreateFile.to_string(),
+            "Could not create the file".to_string()
+        );
     }
 
     #[test]
     fn test_could_not_find_test_case_by_id() {
-        assert_eq!(ApiError::CouldNotFindTestCaseById(12345).to_string(), 
-        format!("Couldn't find a test case with ID == {}", 12345).to_string());
+        assert_eq!(
+            ApiError::CouldNotFindTestCaseById(12345).to_string(),
+            format!("Couldn't find a test case with ID == {}", 12345).to_string()
+        );
     }
 
     #[test]
     fn test_cant_craete_config() {
-        assert_eq!(ApiError::CantCreateConfig.to_string(), "Couldn't create a config".to_string());
+        assert_eq!(
+            ApiError::CantCreateConfig.to_string(),
+            "Couldn't create a config".to_string()
+        );
     }
 
     #[test]
     fn test_project_id_more_then_zero() {
-        assert_eq!(ApiError::ProjectIdMoreThenZero.to_string(), "The project ID must be greater than zero".to_string());
+        assert_eq!(
+            ApiError::ProjectIdMoreThenZero.to_string(),
+            "The project ID must be greater than zero".to_string()
+        );
     }
 
     #[test]
     fn test_upload_cancelled_by_user() {
-        assert_eq!(ApiError::UploadCancelledByUser.to_string(), "Upload cancelled by user".to_string());
+        assert_eq!(
+            ApiError::UploadCancelledByUser.to_string(),
+            "Upload cancelled by user".to_string()
+        );
+    }
+
+    #[test]
+    fn test_error_invalid_test_file_name() {
+        let error = "some error";
+        assert_eq!(
+            ApiError::InvalidTestFileName(error.to_string()).to_string(),
+            format!("Invalid test file name: {}", error)
+        );
     }
 }
