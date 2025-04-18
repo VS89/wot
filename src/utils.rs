@@ -1,7 +1,10 @@
-use tokio::{fs::File, io::{AsyncReadExt, AsyncWriteExt}};
-use std::path::Path;
-use zip::ZipArchive;
 use std::io::Cursor;
+use std::path::Path;
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
+use zip::ZipArchive;
 
 use super::external_api::ApiError;
 
@@ -26,9 +29,10 @@ pub async fn read_file_to_buffer(path: &Path) -> Result<Vec<u8>, ApiError> {
 /// Get file name with extension
 pub fn get_file_name(path: &Path) -> Result<String, ApiError> {
     if path.is_dir() {
-        return Err(ApiError::InvalidFileName)
+        return Err(ApiError::InvalidFileName);
     }
-    Ok(path.file_name()
+    Ok(path
+        .file_name()
         .and_then(|name| name.to_str())
         .ok_or(ApiError::InvalidFileName)?
         .to_string())
@@ -37,7 +41,7 @@ pub fn get_file_name(path: &Path) -> Result<String, ApiError> {
 pub fn validate_zip_archive(buffer: &Vec<u8>) -> Result<(), ApiError> {
     let cursor = Cursor::new(buffer);
     if ZipArchive::new(cursor).is_err() {
-        return Err(ApiError::InvalidFileFormat)
+        return Err(ApiError::InvalidFileFormat);
     }
     Ok(())
 }
@@ -45,9 +49,16 @@ pub fn validate_zip_archive(buffer: &Vec<u8>) -> Result<(), ApiError> {
 /// Create file in current directory
 ///
 /// Return full path to created file
-pub async fn save_file_in_current_directory(file_name: &str, content: &[u8]) -> Result<String, ApiError> {
-    let mut file = File::create(file_name).await.map_err(|_| ApiError::CouldNotCreateFile)?;
-    file.write_all(content).await.map_err(|_| ApiError::CouldNotCreateFile)?;
+pub async fn save_file_in_current_directory(
+    file_name: &str,
+    content: &[u8],
+) -> Result<String, ApiError> {
+    let mut file = File::create(file_name)
+        .await
+        .map_err(|_| ApiError::CouldNotCreateFile)?;
+    file.write_all(content)
+        .await
+        .map_err(|_| ApiError::CouldNotCreateFile)?;
     let mut path = std::env::current_dir().map_err(|_| ApiError::CouldNotCreateFile)?;
     path.push(file_name);
     Ok(path.display().to_string())
@@ -63,7 +74,8 @@ fn get_dir_archive() -> Result<PathBuf, ApiError> {
     UserDirs::new()
         .ok_or(ApiError::NotFoundUserDir)
         .map(|user_dirs| {
-            user_dirs.home_dir()
+            user_dirs
+                .home_dir()
                 .join(CONFIG_DIR)
                 .join(format!("testops_results_report_{timestamp}.zip"))
         })
@@ -75,7 +87,7 @@ pub async fn validate_project_id(
     testops_api_client: &TestopsApi,
 ) -> Result<(), ApiError> {
     let set_project_ids: HashSet<u32> = testops_api_client.get_all_project_ids().await?;
-    if !set_project_ids.contains(&project_id){
+    if !set_project_ids.contains(&project_id) {
         return Err(ApiError::ProjectIdNotFound(project_id));
     }
     Ok(())
@@ -114,16 +126,34 @@ pub async fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, ApiError
     Ok(dir_archive)
 }
 
+/// Convert to PascalCase
+///
+/// input - some_name
+/// return - SomeName
+pub fn convert_to_pascal_case(input: &str) -> String {
+    input
+        .split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
 
     use super::*;
-    use std::{env, fs::Permissions, os::unix::fs::PermissionsExt};
-    use tokio::fs;
-    use regex::Regex;
-    use crate::external_api::testops_api::TestopsApi;
     use crate::external_api::testops_api::models::launch_info::LaunchInfo;
     use crate::external_api::testops_api::models::test_case_scenario::Scenario;
+    use crate::external_api::testops_api::TestopsApi;
+    use regex::Regex;
+    use rstest::rstest;
+    use std::{env, fs::Permissions, os::unix::fs::PermissionsExt};
+    use tokio::fs;
 
     const CARGO_MANIFEST_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -164,9 +194,17 @@ mod tests {
         let is_zip_file = validate_zip_archive(&buffer);
         assert!(is_zip_file.is_err());
         assert_eq!(
-            is_zip_file.unwrap_err().to_string(), 
+            is_zip_file.unwrap_err().to_string(),
             "Invalid file format: File is not a valid ZIP archive".to_string()
         );
+    }
+
+    #[rstest]
+    #[case("test_some_one", "TestSomeOne")]
+    #[case("", "")]
+    #[case("test_one.py", "TestOne.py")]
+    fn test_convert_to_pascal_case(#[case] filename: String, #[case] exp_pascal_case: String) {
+        assert_eq!(exp_pascal_case, convert_to_pascal_case(&filename))
     }
 
     #[test]
@@ -219,7 +257,9 @@ mod tests {
     #[tokio::test]
     async fn test_access_denied() {
         let path = &Path::new(CARGO_MANIFEST_DIR).join("test_files/file_access_denied.txt");
-        fs::set_permissions(path, Permissions::from_mode(0o200)).await.unwrap();
+        fs::set_permissions(path, Permissions::from_mode(0o200))
+            .await
+            .unwrap();
 
         let result = read_file_to_buffer(path).await;
         assert_io_error(result);
@@ -229,8 +269,7 @@ mod tests {
     async fn test_validate_project_id_exist() {
         let testops_api = TestopsApi::default_test();
         let project_id_exist: u32 = 2;
-        let res = validate_project_id(project_id_exist, &testops_api)
-            .await;
+        let res = validate_project_id(project_id_exist, &testops_api).await;
         assert!(res.is_ok());
     }
 
@@ -238,8 +277,7 @@ mod tests {
     async fn test_validate_project_id_nonexist() {
         let testops_api = TestopsApi::default_test();
         let project_id_nonexist: u32 = 28888;
-        let res = validate_project_id(project_id_nonexist, &testops_api)
-            .await;
+        let res = validate_project_id(project_id_nonexist, &testops_api).await;
         assert!(res.is_err());
         assert_eq!(
             res.unwrap_err().to_string(),
@@ -275,7 +313,9 @@ mod tests {
         let full_path: PathBuf = desktop_dir.join("dir_for_test_zip_directory");
         let _ = fs::create_dir_all(&full_path);
         // Используем функцию zip_directory и проверяем полученный путь
-        let zip_dir = zip_directory(&full_path.to_str().unwrap()).await.unwrap_or_default();
+        let zip_dir = zip_directory(&full_path.to_str().unwrap())
+            .await
+            .unwrap_or_default();
         let re = Regex::new(r"testops_results_report_\d+\.zip").unwrap();
         if !re.is_match(&zip_dir.to_str().unwrap_or_default()) {
             assert!(
@@ -295,9 +335,13 @@ mod tests {
         let full_path: PathBuf = desktop_dir.join("dir_for_test_zip_directory_with_one_file");
         let _ = fs::create_dir_all(&full_path);
         // Создаем файл в директории
-        let _ = File::create(full_path.join("some_file.json")).await.unwrap();
+        let _ = File::create(full_path.join("some_file.json"))
+            .await
+            .unwrap();
         // Используем функцию zip_directory и проверяем полученный путь
-        let zip_dir = zip_directory(&full_path.to_str().unwrap()).await.unwrap_or_default();
+        let zip_dir = zip_directory(&full_path.to_str().unwrap())
+            .await
+            .unwrap_or_default();
         let re = Regex::new(r"testops_results_report_\d+\.zip").unwrap();
         if !re.is_match(&zip_dir.to_str().unwrap_or_default()) {
             assert!(
@@ -317,15 +361,22 @@ mod tests {
             "{}/test_files/testops_results_report_1735389182.zip",
             env!("CARGO_MANIFEST_DIR")
         ));
-        let _ = testops_api_client.post_upload_report(&path_archive, &launch_info)
+        let _ = testops_api_client
+            .post_upload_report(&path_archive, &launch_info)
             .await
             .unwrap();
     }
 
     #[tokio::test]
     async fn test_scenario_parse() {
-        let data = fs::read_to_string(format!("{}/test_files/scenario_with_expected_result.json", env!("CARGO_MANIFEST_DIR"))).await.unwrap();
-        let scenario: Scenario = serde_json::from_str(&data).expect("Ошибка парсинга JSON из файла /test_files/scenario_with_expected_result.json");
+        let data = fs::read_to_string(format!(
+            "{}/test_files/scenario_with_expected_result.json",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .await
+        .unwrap();
+        let scenario: Scenario = serde_json::from_str(&data)
+            .expect("Ошибка парсинга JSON из файла /test_files/scenario_with_expected_result.json");
         let exp_str = "Подготовка к тесту
 \t\t\t\tПроверка после подготовки
 \t\t\tВторой шаг, что то дергаем
@@ -356,5 +407,4 @@ mod tests {
         let exp_str = "";
         assert_eq!(data.get_scenario(), exp_str);
     }
-
 }

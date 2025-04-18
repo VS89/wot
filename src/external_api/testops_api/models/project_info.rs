@@ -6,9 +6,11 @@ pub struct ProjectInfo {
 }
 
 impl ProjectInfo {
-
     #[cfg(test)]
     pub fn new(id: u32, name: &str) -> Self {
-        Self { id, name: name.to_string() }
+        Self {
+            id,
+            name: name.to_string(),
+        }
     }
 }

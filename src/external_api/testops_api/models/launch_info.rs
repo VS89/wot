@@ -6,10 +6,12 @@ pub struct LaunchInfo {
 }
 
 impl LaunchInfo {
-
     #[cfg(test)]
     pub fn default() -> Self {
-        Self { name: "test_report_upload".to_string(), project_id: 2 }
+        Self {
+            name: "test_report_upload".to_string(),
+            project_id: 2,
+        }
     }
 
     pub fn new(name: &str, project_id: u32) -> Self {
@@ -20,7 +22,6 @@ impl LaunchInfo {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
@@ -30,7 +31,10 @@ mod tests {
     fn test_create_launch_info() {
         assert_eq!(
             LaunchInfo::new("my_launch", 12345),
-            LaunchInfo { name: "my_launch".to_string(), project_id: 12345 }
+            LaunchInfo {
+                name: "my_launch".to_string(),
+                project_id: 12345
+            }
         );
     }
 
@@ -38,7 +42,10 @@ mod tests {
     fn test_default_launch_info() {
         assert_eq!(
             LaunchInfo::default(),
-            LaunchInfo { name: "test_report_upload".to_string(), project_id: 2 }
+            LaunchInfo {
+                name: "test_report_upload".to_string(),
+                project_id: 2
+            }
         );
     }
 }

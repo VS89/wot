@@ -1,7 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 
 use crate::external_api::{testops_api::TestopsApi, ApiError};
-use crate::{send_report, import_testcase_by_id};
+use crate::{import_testcase_by_id, send_report};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(
@@ -31,7 +32,7 @@ pub struct ReportArgs {
     #[arg(long, short, required = true)]
     pub directory_path: String,
     /// Allure project id
-    #[arg(long, short, required = true, value_parser = validate_u32_more_then_zero)]
+    #[arg(long, short, requires = "directory_path", value_parser = validate_u32_more_then_zero)]
     pub project_id: u32,
 }
 
@@ -40,16 +41,61 @@ pub struct TestcaseArgs {
     /// Import testcase
     #[arg(long, short, required = true, value_parser = validate_u32_more_then_zero)]
     pub import_testcase_id: u32,
+    /// Use the file name entered by the user
+    #[arg(long, short, requires = "import_testcase_id", value_parser = validate_test_file_name)]
+    pub filename: Option<String>,
+}
+
+impl TestcaseArgs {
+    pub fn get_filename_for_test(&self) -> String {
+        if let Some(f_name) = &self.filename {
+            if !f_name.ends_with(".py") {
+                return format!("{}.py", f_name);
+            }
+            return f_name.to_string();
+        }
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("test_{}_{}.py", timestamp, self.import_testcase_id)
+    }
+
+    #[cfg(test)]
+    pub fn new_test(import_testcase_id: u32, filename: Option<String>) -> Self {
+        Self {
+            import_testcase_id,
+            filename,
+        }
+    }
 }
 
 fn validate_u32_more_then_zero(value: &str) -> Result<u32, ApiError> {
-    let project_id: u32 = value.parse().map_err(|_| ApiError::Parse(value.to_string()))?;
+    let project_id: u32 = value
+        .parse()
+        .map_err(|_| ApiError::Parse(value.to_string()))?;
     if project_id == 0 {
-        return Err(ApiError::ProjectIdMoreThenZero)
+        return Err(ApiError::ProjectIdMoreThenZero);
     }
     Ok(project_id)
 }
 
+fn validate_test_file_name(value: &str) -> Result<String, ApiError> {
+    if !(6..=120).contains(&value.len()) || !value.starts_with("test_") {
+        return Err(ApiError::InvalidTestFileName(
+            "len must be between 6 and 120 and start with \"test_\"".to_string(),
+        ));
+    }
+    let is_valid_name = value
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.');
+    if !is_valid_name {
+        return Err(ApiError::InvalidTestFileName(
+            "only lowercase Latin letters and digit are allowed for the file name".to_string(),
+        ));
+    }
+    Ok(value.to_string())
+}
 
 pub async fn handle_command(
     cli: Cli,
@@ -59,13 +105,21 @@ pub async fn handle_command(
 ) {
     match &cli.command {
         Commands::Report(value) => {
-            match send_report(&value.directory_path, value.project_id, testops_api, stdin.lock(), stdout).await {
+            match send_report(
+                &value.directory_path,
+                value.project_id,
+                testops_api,
+                stdin.lock(),
+                stdout,
+            )
+            .await
+            {
                 Ok(value) => println!("{}", value),
                 Err(e) => eprintln!("Failed to send report: {}", e),
             };
         }
         Commands::Testcase(value) => {
-            match import_testcase_by_id(value.import_testcase_id, testops_api).await {
+            match import_testcase_by_id(value, testops_api).await {
                 Ok(value) => println!("{}", value),
                 Err(e) => eprintln!("Failed to import testcase by id: {}", e),
             };
@@ -73,25 +127,145 @@ pub async fn handle_command(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
 
     use super::*;
     use clap::Parser;
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
+
+    const INVALID_NAME_MSG_ERROR: &str =
+        "only lowercase Latin letters and digit are allowed for the file name";
+    const LEN_AND_PREFIX_ERROR: &str = "len must be between 6 and 120 and start with \"test_\"";
+    const MAIN_HELP: &str = r#"CLI application for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops
+
+Usage: wot <COMMAND>
+
+Commands:
+  report    Uploading a report to TestOps
+  testcase  Action with testcase
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+"#;
+
+    const REPORT_HELP: &str = r#"Uploading a report to TestOps
+
+Usage: wot report --directory-path <DIRECTORY_PATH> --project-id <PROJECT_ID>
+
+Options:
+  -d, --directory-path <DIRECTORY_PATH>  Path to directory
+  -p, --project-id <PROJECT_ID>          Allure project id
+  -h, --help                             Print help
+  -V, --version                          Print version
+"#;
+    const TESTCASE_HELP: &str = r#"Action with testcase
+
+Usage: wot testcase [OPTIONS] --import-testcase-id <IMPORT_TESTCASE_ID>
+
+Options:
+  -i, --import-testcase-id <IMPORT_TESTCASE_ID>  Import testcase
+  -f, --filename <FILENAME>                      Use the file name entered by the user
+  -h, --help                                     Print help
+  -V, --version                                  Print version
+"#;
+
+    #[fixture]
+    fn cli_command() -> assert_cmd::Command {
+        assert_cmd::Command::cargo_bin("wot").expect("Failed to find wot binary")
+    }
+
+    #[rstest]
+    #[case("")]
+    #[case("test_")]
+    #[case("a".repeat(5))]
+    #[case("a".repeat(6))]
+    #[case(format!("test_{}", "a".repeat(116)))]
+    fn test_invalid_file_name_test_case(#[case] file_name: String) {
+        let result = validate_test_file_name(&file_name);
+        assert!(result.is_err());
+        assert_eq!(
+            ApiError::InvalidTestFileName(LEN_AND_PREFIX_ERROR.to_string()).to_string(),
+            result.unwrap_err().to_string()
+        );
+    }
+
+    #[rstest]
+    #[case("test_A")]
+    #[case("test_some_name_@")]
+    #[case("test_###")]
+    #[case("test_U+30FC")]
+    fn test_invalid_file_name_digit_and_letters(#[case] file_name: String) {
+        let result = validate_test_file_name(&file_name);
+        assert!(result.is_err());
+        assert_eq!(
+            ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string(),
+            result.unwrap_err().to_string()
+        );
+    }
+
+    #[rstest]
+    fn test_invalid_file_name_cmd(mut cli_command: assert_cmd::Command) {
+        let result = cli_command
+            .arg("testcase")
+            .arg("-i")
+            .arg("11111")
+            .arg("-f")
+            .arg("test_A")
+            .assert()
+            .failure();
+        result.stderr(predicates::str::contains(
+            ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string(),
+        ));
+    }
+
+    #[rstest]
+    #[case("-f")]
+    #[case("--filename")]
+    fn test_import_testcase_with_filename(#[case] flag: String) {
+        let filename = "test_file";
+        let args = Cli::try_parse_from(["wot", "testcase", "-i", "1111", &flag, filename])
+            .expect("Failed to parse arguments");
+        match args.command {
+            Commands::Testcase(value) => {
+                assert_eq!(value.filename.unwrap(), filename);
+            }
+            _ => {}
+        }
+    }
+
+    #[rstest]
+    #[case("-f")]
+    #[case("--filename")]
+    fn test_filename_requires_import_testcase(
+        #[case] flag: String,
+        mut cli_command: assert_cmd::Command,
+    ) {
+        cli_command
+            .arg("testcase")
+            .arg(&flag)
+            .arg("file_name")
+            .assert()
+            .failure()
+            .stderr(predicates::str::contains(
+                "Invalid test file name: len must be between 6 and 120 and start with \"test_\"",
+            ));
+    }
 
     #[rstest]
     #[case("some_dir", "-d")]
     #[case("./some_dir", "--directory-path")]
     #[case("./one_dir/second_dir", "-d")]
     fn test_report_command_positive(#[case] dir_path: String, #[case] flag: String) {
-        let args = Cli::parse_from(["wot", "report", &flag, &dir_path, "-p", "777"]);
+        let args = Cli::try_parse_from(["wot", "report", &flag, &dir_path, "-p", "777"])
+            .expect("Failed to parse arguments");
         match args.command {
             Commands::Report(value) => {
                 assert_eq!(value.directory_path, dir_path);
                 assert_eq!(value.project_id, 777);
-            },
+            }
             _ => {}
         }
     }
@@ -100,11 +274,12 @@ mod tests {
     #[case("-i")]
     #[case("--import-testcase-id")]
     fn test_import_testcase_command_positive(#[case] flag: String) {
-        let args = Cli::parse_from(["wot", "testcase", &flag, "1111"]);
+        let args = Cli::try_parse_from(["wot", "testcase", &flag, "1111"])
+            .expect("Failed to parse arguments");
         match args.command {
             Commands::Testcase(value) => {
                 assert_eq!(value.import_testcase_id, 1111);
-            },
+            }
             _ => {}
         }
     }
@@ -113,7 +288,10 @@ mod tests {
     fn test_validate_value_equal_zero() {
         let result = validate_u32_more_then_zero("0");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ApiError::ProjectIdMoreThenZero));
+        assert!(matches!(
+            result.unwrap_err(),
+            ApiError::ProjectIdMoreThenZero
+        ));
     }
 
     #[rstest]
@@ -130,76 +308,62 @@ mod tests {
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_help_output(#[case] flag: String) {
-        let exp_help_text = r#"CLI application for Allure TestOps <https://qameta.io/>. wot - WrapperOverTestops
-
-Usage: wot <COMMAND>
-
-Commands:
-  report    Uploading a report to TestOps
-  testcase  Action with testcase
-  help      Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
-"#;
-        let mut cmd = assert_cmd::Command::cargo_bin("wot").unwrap();
-        cmd.arg(flag)
+    fn test_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
+        cli_command
+            .arg(flag)
             .assert()
             .success()
-            .stdout(predicates::str::contains(exp_help_text));
+            .stdout(predicates::str::contains(MAIN_HELP));
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_report_help_output(#[case] flag: String) {
-        let exp_help_text = r#"Uploading a report to TestOps
-
-Usage: wot report --directory-path <DIRECTORY_PATH> --project-id <PROJECT_ID>
-
-Options:
-  -d, --directory-path <DIRECTORY_PATH>  Path to directory
-  -p, --project-id <PROJECT_ID>          Allure project id
-  -h, --help                             Print help
-  -V, --version                          Print version
-"#;
-        let mut cmd = assert_cmd::Command::cargo_bin("wot").unwrap();
-        cmd.args(["report", &flag])
+    fn test_report_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
+        cli_command
+            .args(["report", &flag])
             .assert()
             .success()
-            .stdout(predicates::str::contains(exp_help_text));
+            .stdout(predicates::str::contains(REPORT_HELP));
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_testcase_help_output(#[case] flag: String) {
-        let exp_help_text = r#"Action with testcase
-
-Usage: wot testcase --import-testcase-id <IMPORT_TESTCASE_ID>
-
-Options:
-  -i, --import-testcase-id <IMPORT_TESTCASE_ID>  Import testcase
-  -h, --help                                     Print help
-  -V, --version                                  Print version
-"#;
-        let mut cmd = assert_cmd::Command::cargo_bin("wot").unwrap();
-        cmd.args(["testcase", &flag])
+    fn test_testcase_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
+        cli_command
+            .args(["testcase", &flag])
             .assert()
             .success()
-            .stdout(predicates::str::contains(exp_help_text));
+            .stdout(predicates::str::contains(TESTCASE_HELP));
     }
 
     #[rstest]
     #[case("report")]
     #[case("testcase")]
-    fn test_missing_required_args(#[case] flag: String) {
-        let mut cmd = assert_cmd::Command::cargo_bin("wot").unwrap();
-        cmd.arg(flag)
+    fn test_missing_required_args(#[case] flag: String, mut cli_command: assert_cmd::Command) {
+        cli_command
+            .arg(flag)
             .assert()
             .failure()
             .stderr(predicates::str::contains("required"));
+    }
+
+    #[rstest]
+    fn test_get_filename_from_testcase_args() {
+        let testcase_args = TestcaseArgs::new_test(123, None);
+        assert!(testcase_args.get_filename_for_test().starts_with("test_"));
+        assert!(testcase_args.get_filename_for_test().ends_with("_123.py"));
+    }
+
+    #[rstest]
+    #[case("test_first_case", "test_first_case.py")]
+    #[case("test_case.py", "test_case.py")]
+    fn test_generate_user_filename(
+        #[case] input_file_name: String,
+        #[case] output_file_name: String,
+    ) {
+        let test_case_args = TestcaseArgs::new_test(1234, Some(input_file_name));
+        assert_eq!(test_case_args.get_filename_for_test(), output_file_name);
     }
 }

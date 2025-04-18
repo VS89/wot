@@ -1,6 +1,6 @@
-use crate::external_api::testops_api::allure_meta_data::AllureMetaData;
 use super::custom_field_info::CustomFieldInfo;
 use super::tag::Tag;
+use crate::external_api::testops_api::allure_meta_data::AllureMetaData;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -15,21 +15,20 @@ pub struct TestCaseOverview {
     pub tags: Option<Vec<Tag>>,
 }
 
-
 impl TestCaseOverview {
-
     fn generate_allure_decorators_from_fields(&self) -> Vec<String> {
         self.custom_fields.as_ref().map_or_else(Vec::new, |fields| {
-            fields.iter()
-                .map(|field| {
-                    match field.custom_field.name.to_ascii_lowercase().as_str() {
+            fields
+                .iter()
+                .map(
+                    |field| match field.custom_field.name.to_ascii_lowercase().as_str() {
                         "epic" => AllureMetaData::epic(&field.name),
                         "feature" => AllureMetaData::feature(&field.name),
                         "story" => AllureMetaData::story(&field.name),
                         "suite" => AllureMetaData::suite(&field.name),
                         _ => AllureMetaData::label(&field.custom_field.name, &field.name),
-                    }
-                })
+                    },
+                )
                 .collect()
         })
     }
@@ -38,7 +37,8 @@ impl TestCaseOverview {
     pub fn convert_allure_metadata_to_python_template(&self) -> String {
         let mut allure_decorators = self.generate_allure_decorators_from_fields();
         if let Some(tags) = &self.tags {
-            let tag_list = tags.iter()
+            let tag_list = tags
+                .iter()
                 .map(|t| format!("'{}'", t.name))
                 .collect::<Vec<String>>()
                 .join(", ");
@@ -51,13 +51,16 @@ impl TestCaseOverview {
 
     /// Collect docstring for testcase
     pub fn concat_all_description(&self) -> String {
-        [self.description.as_deref(), self.precondition.as_deref(), self.expected_result.as_deref()]
-            .iter()
-            .filter_map(|&part| part)
-            .collect::<Vec<&str>>()
-            .join("\n\n")
+        [
+            self.description.as_deref(),
+            self.precondition.as_deref(),
+            self.expected_result.as_deref(),
+        ]
+        .iter()
+        .filter_map(|&part| part)
+        .collect::<Vec<&str>>()
+        .join("\n\n")
     }
-
 }
 
 #[cfg(test)]
@@ -68,17 +71,16 @@ mod tests {
     use crate::external_api::testops_api::models::custom_field_info::CustomFieldInfo;
 
     impl TestCaseOverview {
-
         fn with_defaults() -> Self {
-            Self { 
-                id: 1234, 
-                project_id: 222, 
-                name: "Some name case".to_string(), 
-                description: None, 
-                precondition: None, 
-                expected_result: None, 
-                custom_fields: None, 
-                tags: None 
+            Self {
+                id: 1234,
+                project_id: 222,
+                name: "Some name case".to_string(),
+                description: None,
+                precondition: None,
+                expected_result: None,
+                custom_fields: None,
+                tags: None,
             }
         }
 
@@ -90,7 +92,9 @@ mod tests {
     fn create_custom_field(name: &str, value: &str) -> CustomFieldInfo {
         CustomFieldInfo {
             id: 1,
-            custom_field: CustomField { name: name.to_string() },
+            custom_field: CustomField {
+                name: name.to_string(),
+            },
             name: value.to_string(),
         }
     }
@@ -104,12 +108,13 @@ mod tests {
             precondition: None,
             custom_fields,
             expected_result: None,
-            tags: None
+            tags: None,
         }
     }
 
     fn create_tags(names: &[&str]) -> Vec<Tag> {
-        names.iter()
+        names
+            .iter()
             .map(|name| Tag {
                 id: 1,
                 name: name.to_string(),
@@ -132,16 +137,19 @@ mod tests {
             create_custom_field("Story", "OAuth2"),
             create_custom_field("Suite", "Smoke"),
         ];
-        
+
         let test_case_overview = create_test_case_overview(Some(fields));
         let result = test_case_overview.generate_allure_decorators_from_fields();
-        
-        assert_eq!(result, vec![
-            "@allure.epic('Auth')",
-            "@allure.feature('Login')",
-            "@allure.story('OAuth2')",
-            "@allure.suite('Smoke')",
-        ]);
+
+        assert_eq!(
+            result,
+            vec![
+                "@allure.epic('Auth')",
+                "@allure.feature('Login')",
+                "@allure.story('OAuth2')",
+                "@allure.suite('Smoke')",
+            ]
+        );
     }
 
     #[test]
@@ -150,14 +158,17 @@ mod tests {
             create_custom_field("Severity", "High"),
             create_custom_field("Owner", "QA"),
         ];
-       
-        let test_case_overview = create_test_case_overview(Some(fields)); 
+
+        let test_case_overview = create_test_case_overview(Some(fields));
         let result = test_case_overview.generate_allure_decorators_from_fields();
-        
-        assert_eq!(result, vec![
-            "@allure.label('severity', 'High')",
-            "@allure.label('owner', 'QA')",
-        ]);
+
+        assert_eq!(
+            result,
+            vec![
+                "@allure.label('severity', 'High')",
+                "@allure.label('owner', 'QA')",
+            ]
+        );
     }
 
     #[test]
@@ -167,15 +178,18 @@ mod tests {
             create_custom_field("Priority", "P0"),
             create_custom_field("Story", "API"),
         ];
-       
-        let test_case_overview = create_test_case_overview(Some(fields));  
+
+        let test_case_overview = create_test_case_overview(Some(fields));
         let result = test_case_overview.generate_allure_decorators_from_fields();
-        
-        assert_eq!(result, vec![
-            "@allure.epic('Core')",
-            "@allure.label('priority', 'P0')",
-            "@allure.story('API')",
-        ]);
+
+        assert_eq!(
+            result,
+            vec![
+                "@allure.epic('Core')",
+                "@allure.label('priority', 'P0')",
+                "@allure.story('API')",
+            ]
+        );
     }
 
     #[test]
@@ -197,7 +211,10 @@ mod tests {
             expected_result: None,
             ..create_test_case_overview(None)
         };
-        assert_eq!(test_case_overview.concat_all_description(), "Test description");
+        assert_eq!(
+            test_case_overview.concat_all_description(),
+            "Test description"
+        );
     }
 
     #[test]
@@ -264,7 +281,7 @@ mod tests {
     fn test_convert_with_only_tags() {
         let mut test_case = create_test_case_overview(None);
         test_case.tags = Some(create_tags(&["smoke", "regression"]));
-        
+
         let result = test_case.convert_allure_metadata_to_python_template();
         assert_eq!(result, "@allure.tag('smoke', 'regression')");
     }
@@ -277,7 +294,7 @@ mod tests {
         ];
         let mut test_case = create_test_case_overview(Some(fields));
         test_case.tags = Some(create_tags(&["api", "security"]));
-        
+
         let result = test_case.convert_allure_metadata_to_python_template();
         assert_eq!(
             result,
@@ -289,19 +306,16 @@ mod tests {
     fn test_special_characters_in_tags() {
         let mut test_case = create_test_case_overview(None);
         test_case.tags = Some(create_tags(&["data's", "\"quoted\""]));
-        
+
         let result = test_case.convert_allure_metadata_to_python_template();
-        assert_eq!(
-            result,
-            "@allure.tag('data's', '\"quoted\"')"
-        );
+        assert_eq!(result, "@allure.tag('data's', '\"quoted\"')");
     }
 
     #[test]
     fn test_empty_tags() {
         let mut test_case = create_test_case_overview(None);
         test_case.tags = Some(vec![]);
-        
+
         let result = test_case.convert_allure_metadata_to_python_template();
         assert_eq!(result, "");
     }
