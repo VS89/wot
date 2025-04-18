@@ -2,6 +2,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::external_api::{testops_api::TestopsApi, ApiError};
 use crate::{import_testcase_by_id, send_report};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(
@@ -47,7 +48,25 @@ pub struct TestcaseArgs {
 
 impl TestcaseArgs {
     pub fn get_filename_for_test(&self) -> String {
-        format!("test_case_{}.py", self.import_testcase_id)
+        if let Some(f_name) = &self.filename {
+            if !f_name.ends_with(".py") {
+                return format!("{}.py", f_name);
+            }
+            return f_name.to_string();
+        }
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        format!("test_{}_{}.py", timestamp, self.import_testcase_id)
+    }
+
+    #[cfg(test)]
+    pub fn new_test(import_testcase_id: u32, filename: Option<String>) -> Self {
+        Self {
+            import_testcase_id,
+            filename,
+        }
     }
 }
 
@@ -69,7 +88,7 @@ fn validate_test_file_name(value: &str) -> Result<String, ApiError> {
     }
     let is_valid_name = value
         .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '.');
     if !is_valid_name {
         return Err(ApiError::InvalidTestFileName(
             "only lowercase Latin letters and digit are allowed for the file name".to_string(),
@@ -100,7 +119,7 @@ pub async fn handle_command(
             };
         }
         Commands::Testcase(value) => {
-            match import_testcase_by_id(value.import_testcase_id, testops_api).await {
+            match import_testcase_by_id(value, testops_api).await {
                 Ok(value) => println!("{}", value),
                 Err(e) => eprintln!("Failed to import testcase by id: {}", e),
             };
@@ -328,5 +347,23 @@ Options:
             .assert()
             .failure()
             .stderr(predicates::str::contains("required"));
+    }
+
+    #[rstest]
+    fn test_get_filename_from_testcase_args() {
+        let testcase_args = TestcaseArgs::new_test(123, None);
+        assert!(testcase_args.get_filename_for_test().starts_with("test_"));
+        assert!(testcase_args.get_filename_for_test().ends_with("_123.py"));
+    }
+
+    #[rstest]
+    #[case("test_first_case", "test_first_case.py")]
+    #[case("test_case.py", "test_case.py")]
+    fn test_generate_user_filename(
+        #[case] input_file_name: String,
+        #[case] output_file_name: String,
+    ) {
+        let test_case_args = TestcaseArgs::new_test(1234, Some(input_file_name));
+        assert_eq!(test_case_args.get_filename_for_test(), output_file_name);
     }
 }

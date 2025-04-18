@@ -126,6 +126,23 @@ pub async fn zip_directory(path_to_report_dir: &str) -> Result<PathBuf, ApiError
     Ok(dir_archive)
 }
 
+/// Convert to PascalCase
+///
+/// input - some_name
+/// return - SomeName
+pub fn convert_to_pascal_case(input: &str) -> String {
+    input
+        .split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().chain(chars).collect(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -134,6 +151,7 @@ mod tests {
     use crate::external_api::testops_api::models::test_case_scenario::Scenario;
     use crate::external_api::testops_api::TestopsApi;
     use regex::Regex;
+    use rstest::rstest;
     use std::{env, fs::Permissions, os::unix::fs::PermissionsExt};
     use tokio::fs;
 
@@ -179,6 +197,14 @@ mod tests {
             is_zip_file.unwrap_err().to_string(),
             "Invalid file format: File is not a valid ZIP archive".to_string()
         );
+    }
+
+    #[rstest]
+    #[case("test_some_one", "TestSomeOne")]
+    #[case("", "")]
+    #[case("test_one.py", "TestOne.py")]
+    fn test_convert_to_pascal_case(#[case] filename: String, #[case] exp_pascal_case: String) {
+        assert_eq!(exp_pascal_case, convert_to_pascal_case(&filename))
     }
 
     #[test]
