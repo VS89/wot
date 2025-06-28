@@ -66,20 +66,22 @@ fn get_data_from_user_input() -> Result<String, ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_case::test_case;
+    use rstest::rstest;
 
-    #[test_case(String::from("http://instance.ru/api/rs"), String::from("http://instance.ru/api/rs"); "http")]
-    #[test_case(String::from("https://example.com"), String::from("https://example.com"); "https")]
-    #[test_case(String::from("https://instance.ru/"), String::from("https://instance.ru"); "last_char_slash")]
-    #[test_case(String::from("https://example.com////"), String::from("https://example.com"); "multiple_slashes")]
-    fn test_valid_url(url: String, exp_url: String) {
+    #[rstest]
+    #[case("http://instance.ru/api/rs", "http://instance.ru/api/rs")]
+    #[case("https://example.com", "https://example.com")]
+    #[case("https://instance.ru/", "https://instance.ru")]
+    #[case("https://example.com////", "https://example.com")]
+    fn test_valid_url(#[case] url: String, #[case] exp_url: String) {
         let res = validate_url(url).unwrap();
         assert_eq!(res, exp_url, "Ожидали, что URL '{res}' пройдет валидацию");
     }
 
-    #[test_case(String::from(""); "empty string")]
-    #[test_case(String::from("htttp://google.com"); "invalid url")]
-    fn test_invalid_url(url: String) {
+    #[rstest]
+    #[case("")]
+    #[case("htttp://google.com")]
+    fn test_invalid_url(#[case] url: String) {
         let res = validate_url(url).unwrap_err().to_string();
         assert_eq!(
             res, "The string entered must be a URL",
@@ -98,9 +100,10 @@ mod tests {
         );
     }
 
-    #[test_case(""; "empty token")]
-    #[test_case("c4e42f15-5b22-6ae-b2-10b5e2ffcb14"; "invalid uuid token")]
-    fn test_testops_validate_api_token_invalid(value: &str) {
+    #[rstest]
+    #[case("")]
+    #[case("c4e42f15-5b22-6ae-b2-10b5e2ffcb14")]
+    fn test_testops_validate_api_token_invalid(#[case] value: &str) {
         let res = validate_testops_api_token(&value).unwrap_err().to_string();
         assert_eq!(res, "Your token failed validation, please try again",
             "Ожидали что api token: '{value}' НЕ пройдет валидацию и мы получим сообщение об ошибке");
