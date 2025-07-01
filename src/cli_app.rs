@@ -1,7 +1,9 @@
 use clap::{Args, Parser, Subcommand};
 
 use crate::external_api::{testops_api::TestopsApi, ApiError};
+use crate::get_tests_by_allure_id::{parse_tests_from_file, search_test_files, TestMap};
 use crate::{import_testcase_by_id, send_report};
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
@@ -24,8 +26,22 @@ pub enum Commands {
     Report(ReportArgs),
     /// Action with testcase
     Testcase(TestcaseArgs),
+    /// Run tests by allure id
+    RunTests(RunTestsArgs),
 }
 
+#[derive(Args)]
+pub struct RunTestsArgs {
+    /// Allure ids
+    #[arg(long, required = true, value_parser, num_args = 1.., value_delimiter = ' ')]
+    pub allure_ids: Vec<i32>,
+    /// Directory for report
+    #[arg(long, short, required = false)]
+    pub dir_report_path: Option<String>,
+    /// Count threads
+    #[arg(long, short, required = false)]
+    pub threads_count: Option<u32>,
+}
 #[derive(Args)]
 pub struct ReportArgs {
     /// Path to directory
@@ -124,6 +140,59 @@ pub async fn handle_command(
                 Err(e) => eprintln!("Failed to import testcase by id: {}", e),
             };
         }
+        Commands::RunTests(value) => {
+            let test_map: TestMap = search_test_files(env::current_dir().unwrap().as_path())
+                .unwrap()
+                .into_iter()
+                .filter_map(|file_path| parse_tests_from_file(&file_path).ok())
+                .flatten() // Превращает итератор из TestMap в итератор (id, path)
+                .collect(); // Собирает все пары в один итоговый TestMap
+
+            let (run_tests, not_found_ids): (Vec<_>, Vec<_>) = value
+                .allure_ids
+                .iter()
+                .partition(|id| test_map.contains_key(id));
+
+            if !not_found_ids.is_empty() {
+                println!("Не найдены тесты для allure_id: {:?}", not_found_ids);
+            }
+
+            let tests_to_run_paths: Vec<_> =
+                run_tests.iter().filter_map(|id| test_map.get(id)).collect();
+
+            if tests_to_run_paths.is_empty() {
+                println!("Не найдено тестов для запуска.");
+                return;
+            }
+
+            let tests_to_run_str = tests_to_run_paths
+                .iter()
+                .map(|p| p.parse::<String>().unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            println!("Будут запущены тесты: {}", tests_to_run_str);
+
+            println!("Запускаю pytest...");
+            let mut command = std::process::Command::new("pytest");
+            if let Some(threads) = value.threads_count {
+                command.arg(format!("-n{}", threads));
+            }
+            if let Some(dir_report_path) = &value.dir_report_path {
+                command.arg(format!("--alluredir={}", dir_report_path));
+            }
+            let output = command
+                .args(&tests_to_run_paths)
+                .output()
+                .expect("Не удалось выполнить команду pytest. Убедитесь, что он установлен и находится в системном PATH.");
+
+            println!("Статус выполнения: {}", output.status);
+
+            if !output.stdout.is_empty() {
+                println!("--- stdout ---");
+                println!("{}", String::from_utf8_lossy(&output.stdout));
+            }
+        }
     }
 }
 
@@ -142,9 +211,10 @@ mod tests {
 Usage: wot <COMMAND>
 
 Commands:
-  report    Uploading a report to TestOps
-  testcase  Action with testcase
-  help      Print this message or the help of the given subcommand(s)
+  report     Uploading a report to TestOps
+  testcase   Action with testcase
+  run-tests  Run tests by allure id
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help

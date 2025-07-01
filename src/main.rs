@@ -4,6 +4,7 @@ pub mod config;
 pub mod constants;
 pub mod create_template;
 pub mod external_api;
+pub mod get_tests_by_allure_id;
 pub mod utils;
 
 use clap::Parser;
