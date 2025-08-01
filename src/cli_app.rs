@@ -169,9 +169,9 @@ pub async fn handle_command(
                 .iter()
                 .map(|p| p.parse::<String>().unwrap_or_default())
                 .collect::<Vec<_>>()
-                .join(" ");
+                .join("\n");
 
-            println!("Будут запущены тесты: {}", tests_to_run_str);
+            println!("Будут запущены тесты:\n{}", tests_to_run_str);
 
             println!("Запускаю pytest...");
             let mut command = std::process::Command::new("pytest");

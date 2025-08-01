@@ -170,34 +170,6 @@ mod tests {
     use rstest::rstest;
 
     #[rstest]
-    // Определяет путь к вашему Python-файлу.
-    // Вызывает основную функцию parse_tests_from_file.
-    // В случае успеха, результат (пары id и путь) сортируется по id для наглядности и выводится в консоль.
-    // В случае ошибки, выводит сообщение об этом.
-    fn test_parse_tests_from_file() {
-        let base_path = PathBuf::from("test_files/test_all_mark_error.py");
-
-        let all_tests: TestMap = search_test_files(&base_path)
-            .unwrap()
-            .into_iter()
-            .filter_map(|file_path| parse_tests_from_file(&file_path).ok())
-            .flatten() // Превращает итератор из TestMap в итератор (id, path)
-            .collect(); // Собирает все пары в один итоговый TestMap
-
-        let test_id = 7534;
-        println!("all_tests[7534]: {:?}", all_tests.get(&test_id).unwrap());
-    }
-
-    #[rstest]
-    fn test_search_files() {
-        let base_path = PathBuf::from("/Users/valentins/Desktop/work_project/api_tests");
-        // let base_path = PathBuf::from(
-        //     "/Users/valentins/Desktop/work_project/api_tests/tests/api_tests/Envelope/api_tenders",
-        // );
-        search_test_files(&base_path).unwrap();
-    }
-
-    #[rstest]
     fn test_process_dir_entry() {
         // TODO надо будеть подправить тесты чтобы убрать дублирующиеся код
         let temp_dir = tempfile::tempdir().unwrap();
