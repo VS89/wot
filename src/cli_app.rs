@@ -15,12 +15,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
     long_about = None,
     propagate_version = true
 )]
+#[derive(Debug)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Uploading a report to TestOps
     Report(ReportArgs),
@@ -30,7 +31,7 @@ pub enum Commands {
     RunTests(RunTestsArgs),
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
 pub struct RunTestsArgs {
     /// Allure ids
     #[arg(long, required = true, value_parser, num_args = 1.., value_delimiter = ' ')]
@@ -42,7 +43,7 @@ pub struct RunTestsArgs {
     #[arg(long, short, required = false)]
     pub threads_count: Option<u32>,
 }
-#[derive(Args)]
+#[derive(Args, Debug)]
 pub struct ReportArgs {
     /// Path to directory
     #[arg(long, short, required = true)]
@@ -52,7 +53,7 @@ pub struct ReportArgs {
     pub project_id: u32,
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
 pub struct TestcaseArgs {
     /// Import testcase
     #[arg(long, short, required = true, value_parser = validate_u32_more_then_zero)]
@@ -200,7 +201,7 @@ pub async fn handle_command(
 mod tests {
 
     use super::*;
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
     use rstest::{fixture, rstest};
 
     const INVALID_NAME_MSG_ERROR: &str =
@@ -242,11 +243,6 @@ Options:
   -V, --version                                  Print version
 "#;
 
-    #[fixture]
-    fn cli_command() -> assert_cmd::Command {
-        assert_cmd::Command::cargo_bin("wot").expect("Failed to find wot binary")
-    }
-
     #[rstest]
     #[case("")]
     #[case("test_")]
@@ -277,17 +273,11 @@ Options:
     }
 
     #[rstest]
-    fn test_invalid_file_name_cmd(mut cli_command: assert_cmd::Command) {
-        let result = cli_command
-            .arg("testcase")
-            .arg("-i")
-            .arg("11111")
-            .arg("-f")
-            .arg("test_A")
-            .assert()
-            .failure();
-        result.stderr(predicates::str::contains(
-            ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string(),
+    fn test_invalid_file_name_cmd() {
+        let err =
+            Cli::try_parse_from(["wot", "testcase", "-i", "11111", "-f", "test_A"]).unwrap_err();
+        assert!(err.to_string().contains(
+            &ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string()
         ));
     }
 
@@ -309,19 +299,20 @@ Options:
     #[rstest]
     #[case("-f")]
     #[case("--filename")]
-    fn test_filename_requires_import_testcase(
-        #[case] flag: String,
-        mut cli_command: assert_cmd::Command,
-    ) {
-        cli_command
-            .arg("testcase")
-            .arg(&flag)
-            .arg("file_name")
-            .assert()
-            .failure()
-            .stderr(predicates::str::contains(
-                "Invalid test file name: len must be between 6 and 120 and start with \"test_\"",
-            ));
+    fn test_filename_requires_import_testcase(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "testcase", &flag, "file_name"]).unwrap_err();
+        assert!(err.to_string().contains(
+            "Invalid test file name: len must be between 6 and 120 and start with \"test_\""
+        ));
+        // cli_command
+        //     .arg("testcase")
+        //     .arg(&flag)
+        //     .arg("file_name")
+        //     .assert()
+        //     .failure()
+        //     .stderr(predicates::str::contains(
+        //         "Invalid test file name: len must be between 6 and 120 and start with \"test_\"",
+        //     ));
     }
 
     #[rstest]
@@ -378,45 +369,37 @@ Options:
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .arg(flag)
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(MAIN_HELP));
+    fn test_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(MAIN_HELP));
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_report_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .args(["report", &flag])
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(REPORT_HELP));
+    fn test_report_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "report", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(REPORT_HELP))
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_testcase_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .args(["testcase", &flag])
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(TESTCASE_HELP));
+    fn test_testcase_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "testcase", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(TESTCASE_HELP))
     }
 
     #[rstest]
     #[case("report")]
     #[case("testcase")]
-    fn test_missing_required_args(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .arg(flag)
-            .assert()
-            .failure()
-            .stderr(predicates::str::contains("required"));
+    fn test_missing_required_args(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        assert!(err.to_string().contains("required"))
     }
 
     #[rstest]
