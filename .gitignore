@@ -5,3 +5,5 @@ log*
 /test_files
 .DS_Store
 *.py
+
+build_rs_cov.profraw

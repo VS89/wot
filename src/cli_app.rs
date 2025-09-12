@@ -1,7 +1,9 @@
 use clap::{Args, Parser, Subcommand};
 
 use crate::external_api::{testops_api::TestopsApi, ApiError};
+use crate::get_tests_by_allure_id::{parse_tests_from_file, search_test_files, TestMap};
 use crate::{import_testcase_by_id, send_report};
+use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
@@ -13,20 +15,35 @@ use std::time::{SystemTime, UNIX_EPOCH};
     long_about = None,
     propagate_version = true
 )]
+#[derive(Debug)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Uploading a report to TestOps
     Report(ReportArgs),
     /// Action with testcase
     Testcase(TestcaseArgs),
+    /// Run tests by allure id
+    RunTests(RunTestsArgs),
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
+pub struct RunTestsArgs {
+    /// Allure ids
+    #[arg(long, required = true, value_parser, num_args = 1.., value_delimiter = ' ')]
+    pub allure_ids: Vec<i32>,
+    /// Directory for report
+    #[arg(long, short, required = false)]
+    pub dir_report_path: Option<String>,
+    /// Count threads
+    #[arg(long, short, required = false)]
+    pub threads_count: Option<u32>,
+}
+#[derive(Args, Debug)]
 pub struct ReportArgs {
     /// Path to directory
     #[arg(long, short, required = true)]
@@ -36,7 +53,7 @@ pub struct ReportArgs {
     pub project_id: u32,
 }
 
-#[derive(Args)]
+#[derive(Args, Debug)]
 pub struct TestcaseArgs {
     /// Import testcase
     #[arg(long, short, required = true, value_parser = validate_u32_more_then_zero)]
@@ -124,6 +141,59 @@ pub async fn handle_command(
                 Err(e) => eprintln!("Failed to import testcase by id: {}", e),
             };
         }
+        Commands::RunTests(value) => {
+            let test_map: TestMap = search_test_files(env::current_dir().unwrap().as_path())
+                .unwrap()
+                .into_iter()
+                .filter_map(|file_path| parse_tests_from_file(&file_path).ok())
+                .flatten() // Превращает итератор из TestMap в итератор (id, path)
+                .collect(); // Собирает все пары в один итоговый TestMap
+
+            let (run_tests, not_found_ids): (Vec<_>, Vec<_>) = value
+                .allure_ids
+                .iter()
+                .partition(|id| test_map.contains_key(id));
+
+            if !not_found_ids.is_empty() {
+                println!("Не найдены тесты для allure_id: {:?}", not_found_ids);
+            }
+
+            let tests_to_run_paths: Vec<_> =
+                run_tests.iter().filter_map(|id| test_map.get(id)).collect();
+
+            if tests_to_run_paths.is_empty() {
+                println!("Не найдено тестов для запуска.");
+                return;
+            }
+
+            let tests_to_run_str = tests_to_run_paths
+                .iter()
+                .map(|p| p.parse::<String>().unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            println!("Будут запущены тесты:\n{}", tests_to_run_str);
+
+            println!("Запускаю pytest...");
+            let mut command = std::process::Command::new("pytest");
+            if let Some(threads) = value.threads_count {
+                command.arg(format!("-n{}", threads));
+            }
+            if let Some(dir_report_path) = &value.dir_report_path {
+                command.arg(format!("--alluredir={}", dir_report_path));
+            }
+            let output = command
+                .args(&tests_to_run_paths)
+                .output()
+                .expect("Не удалось выполнить команду pytest. Убедитесь, что он установлен и находится в системном PATH.");
+
+            println!("Статус выполнения: {}", output.status);
+
+            if !output.stdout.is_empty() {
+                println!("--- stdout ---");
+                println!("{}", String::from_utf8_lossy(&output.stdout));
+            }
+        }
     }
 }
 
@@ -131,7 +201,7 @@ pub async fn handle_command(
 mod tests {
 
     use super::*;
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
     use rstest::{fixture, rstest};
 
     const INVALID_NAME_MSG_ERROR: &str =
@@ -142,9 +212,10 @@ mod tests {
 Usage: wot <COMMAND>
 
 Commands:
-  report    Uploading a report to TestOps
-  testcase  Action with testcase
-  help      Print this message or the help of the given subcommand(s)
+  report     Uploading a report to TestOps
+  testcase   Action with testcase
+  run-tests  Run tests by allure id
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -171,11 +242,6 @@ Options:
   -h, --help                                     Print help
   -V, --version                                  Print version
 "#;
-
-    #[fixture]
-    fn cli_command() -> assert_cmd::Command {
-        assert_cmd::Command::cargo_bin("wot").expect("Failed to find wot binary")
-    }
 
     #[rstest]
     #[case("")]
@@ -207,17 +273,11 @@ Options:
     }
 
     #[rstest]
-    fn test_invalid_file_name_cmd(mut cli_command: assert_cmd::Command) {
-        let result = cli_command
-            .arg("testcase")
-            .arg("-i")
-            .arg("11111")
-            .arg("-f")
-            .arg("test_A")
-            .assert()
-            .failure();
-        result.stderr(predicates::str::contains(
-            ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string(),
+    fn test_invalid_file_name_cmd() {
+        let err =
+            Cli::try_parse_from(["wot", "testcase", "-i", "11111", "-f", "test_A"]).unwrap_err();
+        assert!(err.to_string().contains(
+            &ApiError::InvalidTestFileName(INVALID_NAME_MSG_ERROR.to_string()).to_string()
         ));
     }
 
@@ -239,19 +299,20 @@ Options:
     #[rstest]
     #[case("-f")]
     #[case("--filename")]
-    fn test_filename_requires_import_testcase(
-        #[case] flag: String,
-        mut cli_command: assert_cmd::Command,
-    ) {
-        cli_command
-            .arg("testcase")
-            .arg(&flag)
-            .arg("file_name")
-            .assert()
-            .failure()
-            .stderr(predicates::str::contains(
-                "Invalid test file name: len must be between 6 and 120 and start with \"test_\"",
-            ));
+    fn test_filename_requires_import_testcase(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "testcase", &flag, "file_name"]).unwrap_err();
+        assert!(err.to_string().contains(
+            "Invalid test file name: len must be between 6 and 120 and start with \"test_\""
+        ));
+        // cli_command
+        //     .arg("testcase")
+        //     .arg(&flag)
+        //     .arg("file_name")
+        //     .assert()
+        //     .failure()
+        //     .stderr(predicates::str::contains(
+        //         "Invalid test file name: len must be between 6 and 120 and start with \"test_\"",
+        //     ));
     }
 
     #[rstest]
@@ -308,45 +369,37 @@ Options:
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .arg(flag)
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(MAIN_HELP));
+    fn test_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(MAIN_HELP));
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_report_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .args(["report", &flag])
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(REPORT_HELP));
+    fn test_report_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "report", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(REPORT_HELP))
     }
 
     #[rstest]
     #[case("-h")]
     #[case("--help")]
-    fn test_testcase_help_output(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .args(["testcase", &flag])
-            .assert()
-            .success()
-            .stdout(predicates::str::contains(TESTCASE_HELP));
+    fn test_testcase_help_output(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", "testcase", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(err.to_string().contains(TESTCASE_HELP))
     }
 
     #[rstest]
     #[case("report")]
     #[case("testcase")]
-    fn test_missing_required_args(#[case] flag: String, mut cli_command: assert_cmd::Command) {
-        cli_command
-            .arg(flag)
-            .assert()
-            .failure()
-            .stderr(predicates::str::contains("required"));
+    fn test_missing_required_args(#[case] flag: String) {
+        let err = Cli::try_parse_from(["wot", &flag]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        assert!(err.to_string().contains("required"))
     }
 
     #[rstest]
